@@ -1,6 +1,7 @@
 [project]
 name = "NAFN-Backend"
 version = "0.0"
+requires-python = ">3.12"
 dependencies = [
    "aws-cdk-lib",
    "constructs"
