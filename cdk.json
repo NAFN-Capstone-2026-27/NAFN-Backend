@@ -1,0 +1,30 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "requirements*.txt",
+      "source.bat",
+      "**/__init__.py",
+      "**/__pycache__",
+      "tests"
+    ]
+  },
+  "context": {
+    "environments": {
+      "dev": {
+        "certificate_arn": "arn:aws:acm:us-east-1:463735866782:certificate/2f6e2328-c159-4418-bbbb-b508f709d8ac",
+        "hosted_zone_id": "Z0000178Y51MVGM5V2EM",
+        "hosted_zone_name": "nafn.us",
+        "project_name": "NAFN", 
+        "domain_name": "dev.nafn.us",
+        "account": "463735866782",
+        "region": "us-east-1"
+      }
+    }
+  }
+}
