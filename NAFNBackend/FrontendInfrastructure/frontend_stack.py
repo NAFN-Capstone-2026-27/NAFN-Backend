@@ -50,6 +50,7 @@ class FrontendStack(Stack):
             block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
             versioned=False,
             removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True
         )
 
         # Sign requests that go to the bucket with AWS Signature Version 4
@@ -67,7 +68,7 @@ class FrontendStack(Stack):
                 ),
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 # CACHING_OPTIMIZED still let's you set Cache-Control headers, but it has a minimum TTL of 1s so no-cache will not work
-                cache_policy=aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
             ),
             domain_names=[domain_name],
             certificate=cert,
