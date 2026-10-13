@@ -67,7 +67,6 @@ class FrontendStack(Stack):
                     origin_access_control=s3_oac,
                 ),
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                # CACHING_OPTIMIZED still let's you set Cache-Control headers, but it has a minimum TTL of 1s so no-cache will not work
                 cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
             ),
             domain_names=[domain_name],
