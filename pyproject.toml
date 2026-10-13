@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["NAFNBackend*"]
+exclude = ["node_modules*"]
+
+[project]
+name = "NAFN-Backend"
+version = "0.0"
+requires-python = ">3.12"
+dependencies = [
+   "aws-cdk-lib",
+   "constructs"
+]
