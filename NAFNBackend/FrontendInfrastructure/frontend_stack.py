@@ -85,4 +85,14 @@ class FrontendStack(Stack):
             ),
         )
 
+        aws_route53.AaaaRecord(
+            self,
+            "CFAaaaRecord",
+            zone=hosted_zone,
+            record_name=f"{domain_name}.",
+            target=aws_route53.RecordTarget.from_alias(
+                aws_route53_targets.CloudFrontTarget(distribution)
+            ),
+        )
+
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)
