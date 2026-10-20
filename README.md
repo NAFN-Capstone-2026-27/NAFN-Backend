@@ -8,7 +8,8 @@ AWS CDK (Python) infrastructure for NAFN.
   - A private S3 bucket named after the environment's domain (for example `dev.nafn.us`)
   - A CloudFront distribution that reads from the bucket through Origin Access Control, redirects HTTP to HTTPS, and has caching disabled
   - A Route 53 A record pointing the domain at the distribution, using an existing ACM certificate and hosted zone
-  - A stack output, `S3FrontendBucket`, with the bucket name
+  - A GitHub OIDC provider and a deployment role restricted to the frontend repository's `main` branch
+  - Outputs `S3FrontendBucket` and `FrontendDeployRoleArn`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) is a placeholder and isn't deployed by `app.py` yet.
 
 ## Prerequisites
@@ -52,8 +53,23 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `hosted_zone_name`| Name of the hosted zone (for example `nafn.us`)     |
 | `domain_name`     | Domain the frontend is served from                  |
 | `project_name`    | Used as the CloudFormation stack name               |
+| `github_oidc_subject` | Exact GitHub OIDC subject allowed to assume the frontend deployment role |
 
 The only environment defined right now is `dev`, which serves `dev.nafn.us`. To add one, copy the `dev` block under a new key and change the values.
+
+## GitHub Actions authentication
+
+The deployment role allows listing the website bucket and uploading/deleting its
+objects. This stack creates the GitHub OIDC provider.
+
+After deployment, set these variables in the frontend GitHub repository:
+
+| CDK output | GitHub variable |
+| --- | --- |
+| `FrontendDeployRoleArn` | `AWS_ROLE_ARN` |
+| `S3FrontendBucket` | `S3_BUCKET` |
+
+Also set `AWS_REGION` to the environment's region (`us-east-1` for `dev`).
 
 ## Deploying
 
