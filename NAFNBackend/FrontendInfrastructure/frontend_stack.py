@@ -24,6 +24,7 @@ class FrontendStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
+        cert_arn: str,
         hosted_zone_id: str,
         hosted_zone_name: str,
         domain_name: str,
@@ -50,14 +51,8 @@ class FrontendStack(Stack):
             zone_name=hosted_zone_name,
         )
 
-        cert = acm.Certificate(
-            self,
-            "FrontendCertificate",
-            domain_name=domain_name,
-            subject_alternative_names=(
-                [f"*.{preview_domain_name}"] if enable_previews else None
-            ),
-            validation=acm.CertificateValidation.from_dns(hosted_zone),
+        cert = acm.Certificate.from_certificate_arn(
+            self, "Certificate", certificate_arn=cert_arn
         )
 
         # We wil be using CloudFront origin access control to access the bucket

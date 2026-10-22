@@ -7,7 +7,7 @@ const test = require('node:test');
 const source = readFileSync(join(
     __dirname, '../NAFNBackend/FrontendInfrastructure/preview_router.js'
 ), 'utf8').replace('__ROUTING_CONFIG__', JSON.stringify({
-    domainName: 'dev.nafn.us', previewDomainName: 'dev.nafn.us'
+    domainName: 'dev.nafn.us'
 }));
 const context = {};
 runInNewContext(source, context);

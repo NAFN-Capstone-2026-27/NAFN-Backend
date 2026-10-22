@@ -7,9 +7,9 @@ AWS CDK (Python) infrastructure for NAFN.
 - **FrontendStack** (`NAFNBackend/FrontendInfrastructure/frontend_stack.py`) hosts the static frontend:
   - A private S3 bucket named after the environment's domain (for example `dev.nafn.us`)
   - A CloudFront distribution that reads from the bucket through Origin Access Control, redirects HTTP to HTTPS, and has caching disabled
-  - Route 53 A/AAAA alias records for the website, pointing to the distribution; dev also includes `*.<preview_domain_name>`
-  - A DNS-validated ACM certificate covering the website domain; dev also includes `*.<preview_domain_name>`
-  - In dev, a CloudFront Function mapping `pr-<number>.<preview_domain_name>` to `previews/pr-<number>/`, with React fallback for extensionless page paths
+  - Route 53 A/AAAA alias records for the website and `*.<domain_name>`, pointing to the distribution
+  - An existing ACM certificate from the environment's `certificate_arn`; the dev certificate also covers preview subdomains
+  - A CloudFront Function mapping `pr-<number>.<domain_name>` to `previews/pr-<number>/`, with React fallback for extensionless page paths
   - A GitHub OIDC provider and a deployment role restricted to the frontend repository's `main` branch
   - Outputs `S3FrontendBucket` and `FrontendDeployRoleArn`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations:
@@ -56,18 +56,17 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | ----------------- | --------------------------------------------------- |
 | `account`         | AWS account ID to deploy into                       |
 | `region`          | AWS region to deploy into                           |
+| `certificate_arn` | ARN of the existing ACM certificate in `us-east-1` |
 | `hosted_zone_id`  | ID of the existing Route 53 hosted zone             |
 | `hosted_zone_name`| Name of the hosted zone (for example `nafn.us`)     |
 | `domain_name`     | Domain the frontend is served from                  |
-| `enable_previews` | Optional, defaults to `false`; enabled only in dev |
-| `preview_domain_name` | Required when previews are enabled; for example `dev.nafn.us` |
 | `project_name`    | Used as the CloudFormation stack name               |
 | `github_oidc_subject` | Exact GitHub OIDC subject allowed to assume the frontend deployment role |
-| `github_preview_oidc_subject` | Required when previews are enabled; exact PR OIDC subject allowed to assume the preview deployment role |
+| `github_preview_oidc_subject` | Exact PR OIDC subject allowed to assume the preview deployment role |
 
-The configured environments are `dev`, `staging`, and `prod`. Only `dev` enables PR previews. Staging and prod omit preview settings and create no preview routing function, wildcard DNS records, wildcard certificate names, or preview roles and outputs.
+The only environment defined right now is `dev`, which serves `dev.nafn.us`. To add one, copy the `dev` block under a new key and change the values.
 
-The stack must use `us-east-1` for CloudFront's ACM certificate. Preview requests
+CloudFront uses the existing certificate configured for each environment. Preview requests
 use their PR's files and `index.html`; asset requests stay within that PR's prefix.
 
 Preview URLs use `pr-<number>.dev.nafn.us`.
@@ -75,22 +74,21 @@ Preview URLs use `pr-<number>.dev.nafn.us`.
 ## GitHub Actions authentication
 
 The main deployment role can list the website bucket and upload/delete its objects.
-In dev, the PR deployment role can list/upload/delete only under `previews/`; the cleanup
-role can only list/delete there. All three roles use the same GitHub OIDC provider.
+The preview role can list/upload/delete only under `previews/` and is shared by
+preview deployment and cleanup. Both roles use the same GitHub OIDC provider.
 
-Cleanup trusts the `main` subject, for a `pull_request_target` workflow handling
+The preview role trusts both PR and `main` subjects. Cleanup uses `main`, for a `pull_request_target` workflow handling
 closed PRs from the default branch (`main`). That workflow must never check out or
 execute PR code. PR preview deployment uses `pull_request` without a GitHub
 environment; restrict it to same-repository PRs in the workflow. Preview access is
 shared across PR prefixes; the workflow must select the correct PR folder.
 
-After deployment, set these variables in the frontend GitHub repository. Preview role outputs exist only in dev:
+After deployment, set these variables in the frontend GitHub repository:
 
 | CDK output | GitHub variable |
 | --- | --- |
-| `FrontendDeployRoleArn` | `AWS_ROLE_ARN` |
+| `FrontendDeployRoleArn` | `AWS_MAIN_ROLE_ARN` |
 | `FrontendPreviewDeployRoleArn` | `AWS_PREVIEW_ROLE_ARN` |
-| `FrontendPreviewCleanupRoleArn` | `AWS_PREVIEW_CLEANUP_ROLE_ARN` |
 | `S3FrontendBucket` | `S3_BUCKET` |
 
 Also set `AWS_REGION` to the environment's region (`us-east-1` for `dev`).

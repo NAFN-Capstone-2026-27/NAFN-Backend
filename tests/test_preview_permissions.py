@@ -19,7 +19,7 @@ class PreviewPermissionsTests(unittest.TestCase):
         cls.output_dir = tempfile.TemporaryDirectory()
         app = App(outdir=cls.output_dir.name)
         stack = FrontendStack(
-            app, "PermissionsTest", config["hosted_zone_id"],
+            app, "PermissionsTest", config["certificate_arn"], config["hosted_zone_id"],
             config["hosted_zone_name"], config["domain_name"],
             Environment(account=config["account"], region=config["region"]),
             enable_previews=config["enable_previews"],
@@ -106,6 +106,10 @@ class PreviewPermissionsTests(unittest.TestCase):
         distribution = next(r["Properties"]["DistributionConfig"]
                             for r in self.resources.values()
                             if r["Type"] == "AWS::CloudFront::Distribution")
+        self.assertEqual(distribution["ViewerCertificate"]["AcmCertificateArn"],
+                         self.config["certificate_arn"])
+        self.assertFalse(any(r["Type"] == "AWS::CertificateManager::Certificate"
+                             for r in self.resources.values()))
         self.assertEqual(distribution["Aliases"], [
             self.config["domain_name"], f"*.{self.config['preview_domain_name']}"
         ])
@@ -132,7 +136,7 @@ class PreviewEnvironmentTests(unittest.TestCase):
                 self.assertFalse(config.get("enable_previews", False))
                 app = App(outdir=outdir)
                 stack = FrontendStack(
-                    app, f"{name}Test", config["hosted_zone_id"],
+                    app, f"{name}Test", config["certificate_arn"], config["hosted_zone_id"],
                     config["hosted_zone_name"], config["domain_name"],
                     Environment(account=config["account"], region=config["region"]),
                     github_oidc_subject=config["github_oidc_subject"],
@@ -152,10 +156,10 @@ class PreviewEnvironmentTests(unittest.TestCase):
                 records = [r["Properties"]["Name"] for r in resources
                            if r["Type"] == "AWS::Route53::RecordSet"]
                 self.assertEqual(records, [f"{config['domain_name']}."] * 2)
-                certificate = next(r["Properties"] for r in resources
-                                   if r["Type"] == "AWS::CertificateManager::Certificate")
-                self.assertFalse(any("*" in domain for domain in
-                                     certificate.get("SubjectAlternativeNames", [])))
+                self.assertEqual(distribution["ViewerCertificate"]["AcmCertificateArn"],
+                                 config["certificate_arn"])
+                self.assertFalse(any(r["Type"] == "AWS::CertificateManager::Certificate"
+                                     for r in resources))
                 roles = [r["Properties"] for r in resources
                          if r["Type"] == "AWS::IAM::Role"]
                 self.assertFalse(any("preview" in r.get("Description", "").lower()
