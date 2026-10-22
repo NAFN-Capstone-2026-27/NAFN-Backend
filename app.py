@@ -41,7 +41,6 @@ env = Environment(account=account, region=region)
 
 FrontendStack(
     app, f"{project_name}-Frontend", hosted_zone_id, hosted_zone_name, domain_name, env,
-    preview_domain_name=config["preview_domain_name"],
     github_oidc_subject=config["github_oidc_subject"],
     github_preview_oidc_subject=config["github_preview_oidc_subject"],
 )

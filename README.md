@@ -7,9 +7,9 @@ AWS CDK (Python) infrastructure for NAFN.
 - **FrontendStack** (`NAFNBackend/FrontendInfrastructure/frontend_stack.py`) hosts the static frontend:
   - A private S3 bucket named after the environment's domain (for example `dev.nafn.us`)
   - A CloudFront distribution that reads from the bucket through Origin Access Control, redirects HTTP to HTTPS, and has caching disabled
-  - Route 53 A/AAAA alias records for the website and `*.<preview_domain_name>`, pointing to the distribution
-  - A DNS-validated ACM certificate covering the website domain and `*.<preview_domain_name>`
-  - A CloudFront Function mapping `pr-<number>.<preview_domain_name>` to `previews/pr-<number>/`, with React fallback for extensionless page paths
+  - Route 53 A/AAAA alias records for the website and `*.<domain_name>`, pointing to the distribution
+  - A DNS-validated ACM certificate covering the website domain and `*.<domain_name>`
+  - A CloudFront Function mapping `pr-<number>.<domain_name>` to `previews/pr-<number>/`, with React fallback for extensionless page paths
   - A GitHub OIDC provider and a deployment role restricted to the frontend repository's `main` branch
   - Outputs `S3FrontendBucket` and `FrontendDeployRoleArn`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations:
@@ -59,7 +59,6 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `hosted_zone_id`  | ID of the existing Route 53 hosted zone             |
 | `hosted_zone_name`| Name of the hosted zone (for example `nafn.us`)     |
 | `domain_name`     | Domain the frontend is served from                  |
-| `preview_domain_name` | Preview domain whose subdomains the certificate covers (for example `dev.nafn.us`) |
 | `project_name`    | Used as the CloudFormation stack name               |
 | `github_oidc_subject` | Exact GitHub OIDC subject allowed to assume the frontend deployment role |
 | `github_preview_oidc_subject` | Exact PR OIDC subject allowed to assume the preview deployment role |

@@ -17,7 +17,7 @@ function handler(event) {
         return request;
     }
 
-    var suffix = '.' + routingConfig.previewDomainName;
+    var suffix = '.' + routingConfig.domainName;
     if (!hostname.endsWith(suffix)) return notFound();
     var label = hostname.slice(0, -suffix.length);
     if (!/^pr-[1-9][0-9]*$/.test(label)) return notFound();

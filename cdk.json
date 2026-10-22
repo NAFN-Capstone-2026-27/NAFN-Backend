@@ -21,7 +21,6 @@
         "hosted_zone_name": "nafn.us",
         "project_name": "NAFN", 
         "domain_name": "dev.nafn.us",
-        "preview_domain_name": "dev.nafn.us",
         "account": "463735866782",
         "region": "us-east-1",
         "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",

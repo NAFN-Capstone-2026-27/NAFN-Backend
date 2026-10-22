@@ -29,7 +29,6 @@ class FrontendStack(Stack):
         domain_name: str,
         env: Environment,
         *,
-        preview_domain_name: str,
         github_oidc_subject: str,
         github_preview_oidc_subject: str,
     ) -> None:
@@ -48,7 +47,7 @@ class FrontendStack(Stack):
             self,
             "FrontendCertificate",
             domain_name=domain_name,
-            subject_alternative_names=[f"*.{preview_domain_name}"],
+            subject_alternative_names=[f"*.{domain_name}"],
             validation=acm.CertificateValidation.from_dns(hosted_zone),
         )
 
@@ -74,7 +73,6 @@ class FrontendStack(Stack):
             "__ROUTING_CONFIG__",
             json.dumps({
                 "domainName": domain_name,
-                "previewDomainName": preview_domain_name,
             }),
         )
         preview_router = aws_cloudfront.Function(
@@ -102,7 +100,7 @@ class FrontendStack(Stack):
                     )
                 ],
             ),
-            domain_names=[domain_name, f"*.{preview_domain_name}"],
+            domain_names=[domain_name, f"*.{domain_name}"],
             certificate=cert,
             default_root_object="index.html",
         )
@@ -131,7 +129,7 @@ class FrontendStack(Stack):
             self,
             "PreviewARecord",
             zone=hosted_zone,
-            record_name=f"*.{preview_domain_name}.",
+            record_name=f"*.{domain_name}.",
             target=aws_route53.RecordTarget.from_alias(
                 aws_route53_targets.CloudFrontTarget(distribution)
             ),
@@ -141,7 +139,7 @@ class FrontendStack(Stack):
             self,
             "PreviewAaaaRecord",
             zone=hosted_zone,
-            record_name=f"*.{preview_domain_name}.",
+            record_name=f"*.{domain_name}.",
             target=aws_route53.RecordTarget.from_alias(
                 aws_route53_targets.CloudFrontTarget(distribution)
             ),

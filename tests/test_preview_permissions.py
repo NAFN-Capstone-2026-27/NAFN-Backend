@@ -22,7 +22,6 @@ class PreviewPermissionsTests(unittest.TestCase):
             app, "PermissionsTest", config["hosted_zone_id"],
             config["hosted_zone_name"], config["domain_name"],
             Environment(account=config["account"], region=config["region"]),
-            preview_domain_name=config["preview_domain_name"],
             github_oidc_subject=config["github_oidc_subject"],
             github_preview_oidc_subject=config["github_preview_oidc_subject"],
         )
