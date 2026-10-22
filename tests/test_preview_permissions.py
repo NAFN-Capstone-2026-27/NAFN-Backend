@@ -56,56 +56,48 @@ class PreviewPermissionsTests(unittest.TestCase):
             {"Fn::GetAtt": [self.bucket_id, "Arn"]}, "/previews/*"
         ]]}
 
-    def test_preview_roles_cannot_list_root_or_write_outside_previews(self):
-        for role in ("FrontendPreviewDeployRole", "FrontendPreviewCleanupRole"):
-            with self.subTest(role=role):
-                statements = self.policy(role)
-                self.assertEqual(len(statements), 2)
-                listing, objects = statements
-                self.assertEqual(listing["Effect"], "Allow")
-                self.assertEqual(listing["Action"], "s3:ListBucket")
-                self.assertEqual(listing["Resource"], {"Fn::GetAtt": [self.bucket_id, "Arn"]})
-                self.assertEqual(listing["Condition"], {
-                    "StringLike": {"s3:prefix": "previews/*"}
-                })
-                self.assertEqual(objects["Effect"], "Allow")
-                self.assertEqual(objects["Resource"], self.preview_objects())
-                expected = (["s3:PutObject", "s3:DeleteObject"]
-                            if role == "FrontendPreviewDeployRole" else "s3:DeleteObject")
-                self.assertEqual(objects["Action"], expected)
+    def test_preview_role_cannot_list_root_or_write_outside_previews(self):
+        statements = self.policy("FrontendPreviewDeployRole")
+        self.assertEqual(len(statements), 2)
+        listing, objects = statements
+        self.assertEqual(listing["Effect"], "Allow")
+        self.assertEqual(listing["Action"], "s3:ListBucket")
+        self.assertEqual(listing["Resource"], {"Fn::GetAtt": [self.bucket_id, "Arn"]})
+        self.assertEqual(listing["Condition"], {
+            "StringLike": {"s3:prefix": "previews/*"}
+        })
+        self.assertEqual(objects["Effect"], "Allow")
+        self.assertEqual(objects["Resource"], self.preview_objects())
+        self.assertEqual(set(objects["Action"]), {"s3:PutObject", "s3:DeleteObject"})
 
-    def test_pr_and_cleanup_roles_have_distinct_exact_trust(self):
+    def test_preview_role_trusts_only_exact_pr_and_main_subjects(self):
         provider_ids = [k for k, v in self.resources.items()
                         if v["Type"] == "AWS::IAM::OIDCProvider"]
         self.assertEqual(len(provider_ids), 1)
-        for role, subject in (
-            ("FrontendPreviewDeployRole", self.config["github_preview_oidc_subject"]),
-            ("FrontendPreviewCleanupRole", self.config["github_oidc_subject"]),
-        ):
-            with self.subTest(role=role):
-                trust = self.resource(
-                    f"PermissionsTest/{role}/Resource", "AWS::IAM::Role"
-                )["AssumeRolePolicyDocument"]["Statement"]
-                self.assertEqual(trust, [{
-                    "Effect": "Allow",
-                    "Action": "sts:AssumeRoleWithWebIdentity",
-                    "Principal": {"Federated": {"Fn::GetAtt": [provider_ids[0], "Arn"]}},
-                    "Condition": {"StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": subject,
-                    }},
-                }])
+        trust = self.resource(
+            "PermissionsTest/FrontendPreviewDeployRole/Resource", "AWS::IAM::Role"
+        )["AssumeRolePolicyDocument"]["Statement"]
+        self.assertEqual(trust, [{
+            "Effect": "Allow",
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Principal": {"Federated": {"Fn::GetAtt": [provider_ids[0], "Arn"]}},
+            "Condition": {"StringEquals": {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                "token.actions.githubusercontent.com:sub": [
+                    self.config["github_preview_oidc_subject"],
+                    self.config["github_oidc_subject"],
+                ],
+            }},
+        }])
         self.assertTrue(self.config["github_preview_oidc_subject"].endswith(":pull_request"))
         self.assertTrue(self.config["github_oidc_subject"].endswith(":ref:refs/heads/main"))
 
-    def test_preview_role_outputs_exist(self):
-        for output, role in (
-            ("FrontendPreviewDeployRoleArn", "FrontendPreviewDeployRole"),
-            ("FrontendPreviewCleanupRoleArn", "FrontendPreviewCleanupRole"),
-        ):
-            role_id = self.resource_ids[f"PermissionsTest/{role}/Resource"]
-            self.assertEqual(self.template["Outputs"][output]["Value"],
-                             {"Fn::GetAtt": [role_id, "Arn"]})
+    def test_only_shared_preview_role_output_exists(self):
+        role_id = self.resource_ids["PermissionsTest/FrontendPreviewDeployRole/Resource"]
+        self.assertEqual(self.template["Outputs"]["FrontendPreviewDeployRoleArn"]["Value"],
+                         {"Fn::GetAtt": [role_id, "Arn"]})
+        self.assertNotIn("FrontendPreviewCleanupRoleArn", self.template["Outputs"])
+        self.assertNotIn("PermissionsTest/FrontendPreviewCleanupRole/Resource", self.resource_ids)
 
 
 if __name__ == "__main__":

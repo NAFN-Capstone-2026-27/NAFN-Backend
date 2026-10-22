@@ -73,10 +73,10 @@ Preview URLs use `pr-<number>.dev.nafn.us`.
 ## GitHub Actions authentication
 
 The main deployment role can list the website bucket and upload/delete its objects.
-The PR deployment role can list/upload/delete only under `previews/`; the cleanup
-role can only list/delete there. All three roles use the same GitHub OIDC provider.
+The preview role can list/upload/delete only under `previews/` and is shared by
+preview deployment and cleanup. Both roles use the same GitHub OIDC provider.
 
-Cleanup trusts the `main` subject, for a `pull_request_target` workflow handling
+The preview role trusts both PR and `main` subjects. Cleanup uses `main`, for a `pull_request_target` workflow handling
 closed PRs from the default branch (`main`). That workflow must never check out or
 execute PR code. PR preview deployment uses `pull_request` without a GitHub
 environment; restrict it to same-repository PRs in the workflow. Preview access is
@@ -86,9 +86,8 @@ After deployment, set these variables in the frontend GitHub repository:
 
 | CDK output | GitHub variable |
 | --- | --- |
-| `FrontendDeployRoleArn` | `AWS_ROLE_ARN` |
+| `FrontendDeployRoleArn` | `AWS_MAIN_ROLE_ARN` |
 | `FrontendPreviewDeployRoleArn` | `AWS_PREVIEW_ROLE_ARN` |
-| `FrontendPreviewCleanupRoleArn` | `AWS_PREVIEW_CLEANUP_ROLE_ARN` |
 | `S3FrontendBucket` | `S3_BUCKET` |
 
 Also set `AWS_REGION` to the environment's region (`us-east-1` for `dev`).

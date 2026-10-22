@@ -182,54 +182,34 @@ class FrontendStack(Stack):
         preview_role = iam.Role(
             self,
             "FrontendPreviewDeployRole",
-            description="Deploy frontend PR previews from GitHub Actions",
+            description="Deploy and clean up frontend PR previews from GitHub Actions",
             assumed_by=iam.FederatedPrincipal(
                 federated=github_provider.attr_arn,
                 assume_role_action="sts:AssumeRoleWithWebIdentity",
                 conditions={
                     "StringEquals": {
                         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": github_preview_oidc_subject,
+                        "token.actions.githubusercontent.com:sub": [
+                            github_preview_oidc_subject,
+                            github_oidc_subject,
+                        ],
                     }
                 },
             ),
         )
-        cleanup_role = iam.Role(
-            self,
-            "FrontendPreviewCleanupRole",
-            description="Remove closed PR previews using trusted main workflow code",
-            assumed_by=iam.FederatedPrincipal(
-                federated=github_provider.attr_arn,
-                assume_role_action="sts:AssumeRoleWithWebIdentity",
-                conditions={
-                    "StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": github_oidc_subject,
-                    }
-                },
-            ),
-        )
-        for role in (preview_role, cleanup_role):
-            role.add_to_policy(
-                iam.PolicyStatement(
-                    actions=["s3:ListBucket"],
-                    resources=[s3_bucket.bucket_arn],
-                    conditions={"StringLike": {"s3:prefix": "previews/*"}},
-                )
+        preview_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:ListBucket"],
+                resources=[s3_bucket.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": "previews/*"}},
             )
+        )
         preview_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["s3:PutObject", "s3:DeleteObject"],
                 resources=[s3_bucket.arn_for_objects("previews/*")],
             )
         )
-        cleanup_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:DeleteObject"],
-                resources=[s3_bucket.arn_for_objects("previews/*")],
-            )
-        )
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)
         CfnOutput(self, "FrontendDeployRoleArn", value=deploy_role.role_arn)
         CfnOutput(self, "FrontendPreviewDeployRoleArn", value=preview_role.role_arn)
-        CfnOutput(self, "FrontendPreviewCleanupRoleArn", value=cleanup_role.role_arn)
