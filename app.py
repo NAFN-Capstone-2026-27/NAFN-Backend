@@ -40,7 +40,8 @@ project_name = config["project_name"]
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, project_name, cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env
+    app, project_name, cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+    github_oidc_subject=config["github_oidc_subject"],
 )
 
 
