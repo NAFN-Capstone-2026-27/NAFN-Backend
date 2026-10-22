@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from aws_cdk import (
     CfnOutput,
     Environment,
@@ -21,19 +24,22 @@ class FrontendStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
-        cert_arn: str,
         hosted_zone_id: str,
         hosted_zone_name: str,
         domain_name: str,
         env: Environment,
         *,
         github_oidc_subject: str,
+        enable_previews: bool = False,
+        preview_domain_name: str | None = None,
+        github_preview_oidc_subject: str | None = None,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
 
-        cert = acm.Certificate.from_certificate_arn(
-            self, "Certificate", certificate_arn=cert_arn
-        )
+        if enable_previews and not (preview_domain_name and github_preview_oidc_subject):
+            raise ValueError(
+                "Enabled previews require preview_domain_name and github_preview_oidc_subject"
+            )
 
         # Kinda surprised this needs both a hosted_zone_id and hosted_zone_name
         # I would have imagined hosted_zone_id is globally unique like s3
@@ -42,6 +48,16 @@ class FrontendStack(Stack):
             "HostedZone",
             hosted_zone_id=hosted_zone_id,
             zone_name=hosted_zone_name,
+        )
+
+        cert = acm.Certificate(
+            self,
+            "FrontendCertificate",
+            domain_name=domain_name,
+            subject_alternative_names=(
+                [f"*.{preview_domain_name}"] if enable_previews else None
+            ),
+            validation=acm.CertificateValidation.from_dns(hosted_zone),
         )
 
         # We wil be using CloudFront origin access control to access the bucket
@@ -61,6 +77,33 @@ class FrontendStack(Stack):
             self, "Frontend-S3-OAC", signing=aws_cloudfront.Signing.SIGV4_ALWAYS
         )
 
+        function_associations = []
+        domain_names = [domain_name]
+        if enable_previews:
+            routing_code = Path(__file__).with_name("preview_router.js").read_text()
+            routing_code = routing_code.replace(
+                "__ROUTING_CONFIG__",
+                json.dumps({
+                    "domainName": domain_name,
+                    "previewDomainName": preview_domain_name,
+                }),
+            )
+            preview_router = aws_cloudfront.Function(
+                self,
+                "PreviewRouter",
+                code=aws_cloudfront.FunctionCode.from_inline(routing_code),
+                runtime=aws_cloudfront.FunctionRuntime.JS_2_0,
+                comment="Route preview subdomains to their PR folders",
+            )
+
+            domain_names.append(f"*.{preview_domain_name}")
+            function_associations.append(
+                aws_cloudfront.FunctionAssociation(
+                    function=preview_router,
+                    event_type=aws_cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            )
+
         distribution = aws_cloudfront.Distribution(
             self,
             "CF-Distribution",
@@ -71,8 +114,9 @@ class FrontendStack(Stack):
                 ),
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
+                function_associations=function_associations,
             ),
-            domain_names=[domain_name],
+            domain_names=domain_names,
             certificate=cert,
             default_root_object="index.html",
         )
@@ -96,6 +140,27 @@ class FrontendStack(Stack):
                 aws_route53_targets.CloudFrontTarget(distribution)
             ),
         )
+
+        if enable_previews:
+            aws_route53.ARecord(
+                self,
+                "PreviewARecord",
+                zone=hosted_zone,
+                record_name=f"*.{preview_domain_name}.",
+                target=aws_route53.RecordTarget.from_alias(
+                    aws_route53_targets.CloudFrontTarget(distribution)
+                ),
+            )
+
+            aws_route53.AaaaRecord(
+                self,
+                "PreviewAaaaRecord",
+                zone=hosted_zone,
+                record_name=f"*.{preview_domain_name}.",
+                target=aws_route53.RecordTarget.from_alias(
+                    aws_route53_targets.CloudFrontTarget(distribution)
+                ),
+            )
 
         github_provider = iam.CfnOIDCProvider(
             self,
@@ -131,5 +196,59 @@ class FrontendStack(Stack):
                 resources=[s3_bucket.arn_for_objects("*")],
             )
         )
+        if enable_previews:
+            preview_role = iam.Role(
+                self,
+                "FrontendPreviewDeployRole",
+                description="Deploy frontend PR previews from GitHub Actions",
+                assumed_by=iam.FederatedPrincipal(
+                    federated=github_provider.attr_arn,
+                    assume_role_action="sts:AssumeRoleWithWebIdentity",
+                    conditions={
+                        "StringEquals": {
+                            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                            "token.actions.githubusercontent.com:sub": github_preview_oidc_subject,
+                        }
+                    },
+                ),
+            )
+            cleanup_role = iam.Role(
+                self,
+                "FrontendPreviewCleanupRole",
+                description="Remove closed PR previews using trusted main workflow code",
+                assumed_by=iam.FederatedPrincipal(
+                    federated=github_provider.attr_arn,
+                    assume_role_action="sts:AssumeRoleWithWebIdentity",
+                    conditions={
+                        "StringEquals": {
+                            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                            "token.actions.githubusercontent.com:sub": github_oidc_subject,
+                        }
+                    },
+                ),
+            )
+            for role in (preview_role, cleanup_role):
+                role.add_to_policy(
+                    iam.PolicyStatement(
+                        actions=["s3:ListBucket"],
+                        resources=[s3_bucket.bucket_arn],
+                        conditions={"StringLike": {"s3:prefix": "previews/*"}},
+                    )
+                )
+            preview_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    resources=[s3_bucket.arn_for_objects("previews/*")],
+                )
+            )
+            cleanup_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:DeleteObject"],
+                    resources=[s3_bucket.arn_for_objects("previews/*")],
+                )
+            )
+            CfnOutput(self, "FrontendPreviewDeployRoleArn", value=preview_role.role_arn)
+            CfnOutput(self, "FrontendPreviewCleanupRoleArn", value=cleanup_role.role_arn)
+
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)
         CfnOutput(self, "FrontendDeployRoleArn", value=deploy_role.role_arn)

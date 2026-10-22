@@ -22,9 +22,12 @@
         "hosted_zone_name": "dev.nafn.us",
         "project_name": "NAFN", 
         "domain_name": "dev.nafn.us",
+        "enable_previews": true,
+        "preview_domain_name": "dev.nafn.us",
         "account": "463735866782",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
+        "github_preview_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:pull_request"
       },
       "prod": {
         "certificate_arn": "arn:aws:acm:us-east-1:892077328991:certificate/e10f34a3-a761-4480-baf3-bb8e5763aa99",
