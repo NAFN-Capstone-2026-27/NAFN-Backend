@@ -40,10 +40,11 @@ project_name = config["project_name"]
 
 env = Environment(account=account, region=region)
 
-FrontendStack(
-    app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
-    github_oidc_subject=config["github_oidc_subject"],
-)
+# Commented out so only the backend stack is ever synthesized. This prevents errors from the placeholder prod values
+# FrontendStack(
+#     app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+#     github_oidc_subject=config["github_oidc_subject"],
+# )
 
 NafnBackendStack(
     app,
