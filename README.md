@@ -10,7 +10,13 @@ AWS CDK (Python) infrastructure for NAFN.
   - A Route 53 A record pointing the domain at the distribution, using an existing ACM certificate and hosted zone
   - A GitHub OIDC provider and a deployment role restricted to the frontend repository's `main` branch
   - Outputs `S3FrontendBucket` and `FrontendDeployRoleArn`
-- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) is a placeholder and isn't deployed by `app.py` yet.
+- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations:
+  - A DynamoDB table keyed by `ein`
+  - An HTTP API with `POST /partners`, backed by a Lambda function (`NAFNBackend/BackendInfrastructure/lambda/`) that validates and stores a partner
+  - `GET /partners`, backed by a Lambda function that lists every partner
+  - Stack outputs `ApiUrl` and `PartnersTableName`
+
+The API's routes, request and response formats, and restrictions are documented in [API.md](API.md).
 
 ## Prerequisites
 
@@ -78,7 +84,7 @@ Every CDK command needs an environment passed with `-c env=<name>`. Without it, 
 ```
 $ cdk synth -c env=dev     # generate the CloudFormation template
 $ cdk diff -c env=dev      # compare against what's deployed
-$ cdk deploy -c env=dev    # deploy
+$ cdk deploy --all -c env=dev    # deploy all stacks (NAFN-Backend, NAFN-Frontend)
 ```
 
 After the deploy, upload the built frontend to the bucket named in the `S3FrontendBucket` output, for example:
@@ -88,6 +94,16 @@ $ aws s3 sync ./dist s3://dev.nafn.us --delete
 ```
 
 Because CloudFront caching is disabled, changes show up right away without a cache invalidation.
+
+After deploying the backend, smoke-test it:
+
+```
+$ python post_deployment_tests.py --env dev
+```
+
+It creates a dummy partner (with an EIN starting with `00`, which the IRS never issues), checks the duplicate and validation errors, checks that `GET /partners` lists it, then deletes the dummy partner. It exits non-zero if any check fails.
+
+Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed. Its cleanup only deletes an item that is still the dummy partner.
 
 ## Other useful commands
 

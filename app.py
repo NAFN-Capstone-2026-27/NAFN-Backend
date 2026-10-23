@@ -4,6 +4,7 @@ from aws_cdk import App, Environment
 import aws_cdk
 
 from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
+from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
 
 app = App()
 
@@ -40,8 +41,15 @@ project_name = config["project_name"]
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, project_name, cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+    app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
     github_oidc_subject=config["github_oidc_subject"],
+)
+
+NafnBackendStack(
+    app,
+    f"{project_name}-Backend",
+    domain_name,
+    env=env,
 )
 
 
