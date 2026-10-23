@@ -23,7 +23,6 @@ class NafnBackendStack(Stack):
         scope: Construct,
         construct_id: str,
         domain_name: str,
-        enable_partner_listing: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -65,8 +64,7 @@ class NafnBackendStack(Stack):
             self, "NafnApi",
             cors_preflight=apigw.CorsPreflightOptions(
                 allow_origins=[f"https://{domain_name}", "https://nafn.us"],
-                allow_methods=[apigw.CorsHttpMethod.POST]
-                + ([apigw.CorsHttpMethod.GET] if enable_partner_listing else []),
+                allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
                 allow_headers=["Content-Type"],
             ),
             create_default_stage=False,
@@ -86,32 +84,29 @@ class NafnBackendStack(Stack):
             ),
         )
 
-        # Listing returns every partner's contact details to anyone who calls it,
-        # so it's only for environments with throwaway data (see cdk.json).
-        if enable_partner_listing:
-            self.list_partners_function = lambda_.Function(
-                self, "NafnListPartnersFunction",
-                runtime=lambda_.Runtime.PYTHON_3_13,
-                architecture=lambda_.Architecture.ARM_64,
-                handler="list_partners.handler",
-                code=lambda_.Code.from_asset(str(LAMBDA_DIR)),
-                timeout=Duration.seconds(10),
-                memory_size=256,
-                environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
-                log_group=logs.LogGroup(
-                    self, "NafnListPartnersLogs",
-                    retention=logs.RetentionDays.ONE_MONTH,
-                    removal_policy=RemovalPolicy.DESTROY,
-                ),
-            )
-            self.partners_table.grant(self.list_partners_function, "dynamodb:Scan")
-            self.api.add_routes(
-                path="/partners",
-                methods=[apigw.HttpMethod.GET],
-                integration=integrations.HttpLambdaIntegration(
-                    "NafnListPartnersIntegration", self.list_partners_function
-                ),
-            )
+        self.list_partners_function = lambda_.Function(
+            self, "NafnListPartnersFunction",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            architecture=lambda_.Architecture.ARM_64,
+            handler="list_partners.handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_DIR)),
+            timeout=Duration.seconds(10),
+            memory_size=256,
+            environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
+            log_group=logs.LogGroup(
+                self, "NafnListPartnersLogs",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
+        )
+        self.partners_table.grant(self.list_partners_function, "dynamodb:Scan")
+        self.api.add_routes(
+            path="/partners",
+            methods=[apigw.HttpMethod.GET],
+            integration=integrations.HttpLambdaIntegration(
+                "NafnListPartnersIntegration", self.list_partners_function
+            ),
+        )
 
         CfnOutput(self, "ApiUrl", value=self.api.api_endpoint)
         # Used by post_deployment_tests.py to clean up its dummy partner.

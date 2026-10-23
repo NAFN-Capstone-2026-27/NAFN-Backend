@@ -42,7 +42,6 @@ def main():
     if args.env not in environments:
         sys.exit(f"Unknown environment: {args.env}")
     config = environments[args.env]
-    listing_enabled = config.get("enable_partner_listing", False)
 
     # Every AWS call below goes through this session, so the account checked
     # here is the account the script actually touches.
@@ -89,15 +88,10 @@ def main():
         ))
 
         status, body = request("GET", partners_url)
-        if listing_enabled:
-            eins = {p.get("ein") for p in body.get("partners", [])}
-            results.append(check(
-                "GET lists the dummy partner", status == 200 and ein in eins, status, body
-            ))
-        else:
-            results.append(check(
-                "GET listing is not exposed", not 200 <= status < 300, status, body
-            ))
+        eins = {p.get("ein") for p in body.get("partners", [])}
+        results.append(check(
+            "GET lists the dummy partner", status == 200 and ein in eins, status, body
+        ))
     finally:
         delete_dummy_partner(table, ein)
 
