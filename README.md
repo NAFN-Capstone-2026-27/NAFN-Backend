@@ -16,6 +16,8 @@ AWS CDK (Python) infrastructure for NAFN.
   - `GET /partners`, backed by a Lambda function that lists every partner
   - Stack outputs `ApiUrl` and `PartnersTableName`
 
+The API's routes, request and response formats, and restrictions are documented in [API.md](API.md).
+
 ## Prerequisites
 
 - Python 3.12 or newer

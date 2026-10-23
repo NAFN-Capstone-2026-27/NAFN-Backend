@@ -1,4 +1,4 @@
-"""GET /partners: return every partner in the table. Only deployed where enabled."""
+"""GET /partners: return every partner in the table."""
 
 import json
 import os
