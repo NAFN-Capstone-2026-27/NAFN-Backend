@@ -32,7 +32,6 @@ env = aws_cdk.Environment(
 account = config["account"]
 region = config["region"]
 # TODO: These parameters should be tied to the account and region.
-cert_arn = config["certificate_arn"]
 hosted_zone_id = config["hosted_zone_id"]
 hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
@@ -41,8 +40,9 @@ project_name = config["project_name"]
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+    app, f"{project_name}-Frontend", hosted_zone_id, hosted_zone_name, domain_name, env,
     github_oidc_subject=config["github_oidc_subject"],
+    github_preview_oidc_subject=config["github_preview_oidc_subject"],
 )
 
 NafnBackendStack(
