@@ -23,23 +23,39 @@ class NafnBackendStack(Stack):
         scope: Construct,
         construct_id: str,
         domain_name: str,
+        *,
+        cors_allow_origins: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # One item per partner organization. EIN is unique per org, so it's the
-        # partition key; this also lets the API reject duplicate sign-ups.
         self.partners_table = dynamodb.TableV2(
-            self, "NafnPartnersTable",
+            self, "NafnPartnersV2Table",
             partition_key=dynamodb.Attribute(
-                name="ein", type=dynamodb.AttributeType.STRING
+                name="partnerId", type=dynamodb.AttributeType.STRING
             ),
             billing=dynamodb.Billing.on_demand(),
             point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
                 point_in_time_recovery_enabled=True
             ),
-            # Keep partner data if the table is ever removed from the stack.
             removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        self.resources_table = dynamodb.TableV2(
+            self, "NafnResourcesTable",
+            partition_key=dynamodb.Attribute(
+                name="resourceId", type=dynamodb.AttributeType.STRING
+            ),
+            billing=dynamodb.Billing.on_demand(),
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        lambda_code = lambda_.Code.from_asset(
+            str(LAMBDA_DIR),
+            exclude=["__pycache__", "**/__pycache__/**", "*.pyc", "**/*.pyc"],
         )
 
         self.create_partner_function = lambda_.Function(
@@ -47,7 +63,7 @@ class NafnBackendStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="create_partner.handler",
-            code=lambda_.Code.from_asset(str(LAMBDA_DIR)),
+            code=lambda_code,
             timeout=Duration.seconds(10),
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
@@ -57,13 +73,17 @@ class NafnBackendStack(Stack):
                 removal_policy=RemovalPolicy.DESTROY,
             ),
         )
-        # Write-only: the function never needs to read or delete partners.
-        self.partners_table.grant(self.create_partner_function, "dynamodb:PutItem")
+        self.partners_table.grant(
+            self.create_partner_function, "dynamodb:PutItem", "dynamodb:Scan"
+        )
 
         self.api = apigw.HttpApi(
             self, "NafnApi",
             cors_preflight=apigw.CorsPreflightOptions(
-                allow_origins=[f"https://{domain_name}", "https://nafn.us"],
+                allow_origins=(
+                    cors_allow_origins if cors_allow_origins is not None
+                    else [f"https://{domain_name}", "https://nafn.us"]
+                ),
                 allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
                 allow_headers=["Content-Type"],
             ),
@@ -89,7 +109,7 @@ class NafnBackendStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="list_partners.handler",
-            code=lambda_.Code.from_asset(str(LAMBDA_DIR)),
+            code=lambda_code,
             timeout=Duration.seconds(10),
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
@@ -108,6 +128,58 @@ class NafnBackendStack(Stack):
             ),
         )
 
+        self.create_resource_function = lambda_.Function(
+            self, "NafnCreateResourceFunction",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            architecture=lambda_.Architecture.ARM_64,
+            handler="create_resource.handler",
+            code=lambda_code,
+            timeout=Duration.seconds(10),
+            memory_size=256,
+            environment={
+                "RESOURCES_TABLE_NAME": self.resources_table.table_name,
+                "PARTNERS_TABLE_NAME": self.partners_table.table_name,
+            },
+            log_group=logs.LogGroup(
+                self, "NafnCreateResourceLogs",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
+        )
+        self.resources_table.grant(self.create_resource_function, "dynamodb:PutItem")
+        self.partners_table.grant(self.create_resource_function, "dynamodb:GetItem")
+        self.api.add_routes(
+            path="/resources",
+            methods=[apigw.HttpMethod.POST],
+            integration=integrations.HttpLambdaIntegration(
+                "NafnCreateResourceIntegration", self.create_resource_function
+            ),
+        )
+
+        self.list_resources_function = lambda_.Function(
+            self, "NafnListResourcesFunction",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            architecture=lambda_.Architecture.ARM_64,
+            handler="list_resources.handler",
+            code=lambda_code,
+            timeout=Duration.seconds(10),
+            memory_size=256,
+            environment={"RESOURCES_TABLE_NAME": self.resources_table.table_name},
+            log_group=logs.LogGroup(
+                self, "NafnListResourcesLogs",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
+        )
+        self.resources_table.grant(self.list_resources_function, "dynamodb:Scan")
+        self.api.add_routes(
+            path="/resources",
+            methods=[apigw.HttpMethod.GET],
+            integration=integrations.HttpLambdaIntegration(
+                "NafnListResourcesIntegration", self.list_resources_function
+            ),
+        )
+
         CfnOutput(self, "ApiUrl", value=self.api.api_endpoint)
-        # Used by post_deployment_tests.py to clean up its dummy partner.
         CfnOutput(self, "PartnersTableName", value=self.partners_table.table_name)
+        CfnOutput(self, "ResourcesTableName", value=self.resources_table.table_name)
