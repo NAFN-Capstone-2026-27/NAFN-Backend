@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from aws_cdk import App, Environment
-import aws_cdk
 
 from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
@@ -23,25 +22,16 @@ if environment_name not in environments:
 
 config = environments[environment_name]
 
-env = aws_cdk.Environment(
-    account=config["account"],
-    region=config["region"]
-)
-
-# Intentionally errors if doesn't exist
 account = config["account"]
 region = config["region"]
-# TODO: These parameters should be tied to the account and region.
-cert_arn = config["certificate_arn"]
-hosted_zone_id = config["hosted_zone_id"]
-hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
 project_name = config["project_name"]
 
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+    app, f"{project_name}-Frontend", config["certificate_arn"],
+    config["hosted_zone_id"], config["hosted_zone_name"], domain_name, env,
     github_oidc_subject=config["github_oidc_subject"],
 )
 
@@ -49,6 +39,7 @@ NafnBackendStack(
     app,
     f"{project_name}-Backend",
     domain_name,
+    cors_allow_origins=config.get("cors_allow_origins"),
     env=env,
 )
 
