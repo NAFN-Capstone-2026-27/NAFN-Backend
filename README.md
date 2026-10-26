@@ -70,14 +70,7 @@ ruff check --fix .
 ruff format .
 ```
 
-Review the fixes before committing; some lint errors require manual changes.
 Shared settings and the pinned Ruff version live in `pyproject.toml`.
-Generated CDK output is excluded.
-
-The Ruff GitHub Actions workflow runs on pushes and pull requests. To block
-merges when checks fail, configure the target branch's protection rule or
-ruleset to require the **Ruff lint and formatting** status check after its first
-run. Disallow bypassing the rule if it should apply to administrators too.
 
 ## Environments
 
