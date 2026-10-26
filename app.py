@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
-from aws_cdk import App, Environment
 import aws_cdk
+from aws_cdk import App, Environment
 
-from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
+from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 
 app = App()
 
 environment_name = app.node.try_get_context("env")
 
 if not environment_name:
-    raise ValueError(
-        "Environment must be specified."
-        "Example: cdk deploy -c env=dev"
-    )
+    raise ValueError("Environment must be specified.Example: cdk deploy -c env=dev")
 
 environments = app.node.try_get_context("environments")
 
@@ -23,10 +20,7 @@ if environment_name not in environments:
 
 config = environments[environment_name]
 
-env = aws_cdk.Environment(
-    account=config["account"],
-    region=config["region"]
-)
+env = aws_cdk.Environment(account=config["account"], region=config["region"])
 
 # Intentionally errors if doesn't exist
 account = config["account"]

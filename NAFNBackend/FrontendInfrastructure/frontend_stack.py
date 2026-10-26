@@ -7,15 +7,13 @@ from aws_cdk import (
     Environment,
     RemovalPolicy,
     Stack,
+    aws_certificatemanager as acm,
     aws_cloudfront,
     aws_cloudfront_origins,
     aws_iam as iam,
     aws_route53,
     aws_route53_targets,
     aws_s3,
-)
-from aws_cdk import (
-    aws_certificatemanager as acm,
 )
 from constructs import Construct
 
@@ -64,7 +62,7 @@ class FrontendStack(Stack):
             block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
             versioned=False,
             removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
+            auto_delete_objects=True,
         )
 
         if enable_previews:

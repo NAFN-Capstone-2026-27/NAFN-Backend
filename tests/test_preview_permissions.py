@@ -1,7 +1,7 @@
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from aws_cdk import App, CfnResource, Environment
 from aws_cdk.assertions import Template
