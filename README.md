@@ -46,6 +46,37 @@ $ pip install .
 
 To add dependencies, add them to the `dependencies` list in `pyproject.toml` and run `pip install .` again.
 
+## Linting and formatting
+
+Install the development tools into your activated virtualenv:
+
+```bash
+pip install -e '.[dev]'
+```
+
+Run the same checks as CI from the repository root:
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+To apply automatic fixes and formatting locally:
+
+```bash
+ruff check --fix .
+ruff format .
+```
+
+Review the fixes before committing; some lint errors require manual changes.
+Shared settings and the pinned Ruff version live in `pyproject.toml`.
+Generated CDK output is excluded.
+
+The Ruff GitHub Actions workflow runs on pushes and pull requests. To block
+merges when checks fail, configure the target branch's protection rule or
+ruleset to require the **Ruff lint and formatting** status check after its first
+run. Disallow bypassing the rule if it should apply to administrators too.
+
 ## Environments
 
 Per-environment settings live under `context.environments` in `cdk.json`. Each environment needs:
