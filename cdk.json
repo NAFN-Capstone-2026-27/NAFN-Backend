@@ -37,7 +37,7 @@
         "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
       },
       "staging": {
-        "certificate_arn": "arn:aws:acm:us-east-2:689508754428:certificate/2932a307-3610-449e-8ec7-b6b3ebe5e82e",
+        "certificate_arn": "arn:aws:acm:us-east-1:689508754428:certificate/d0495d3a-437a-42d8-a9a4-6de79713a117",
         "hosted_zone_id": "Z070700522K1388YDO8T6",
         "hosted_zone_name": "staging.nafn.us",
         "project_name": "NAFN",
