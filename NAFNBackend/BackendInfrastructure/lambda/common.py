@@ -16,7 +16,7 @@ FOCUS_AREAS = (
 )
 
 RESOURCE_CATEGORIES = (
-    "Shelters & Rescues",
+    "Temporary Foster Services",
     "Emergency Vets",
     "Food Assistance",
     "Pet Supplies",

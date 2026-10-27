@@ -116,7 +116,7 @@ Record identifier: `resourceId` (UUID string).
 | `resourceId` | Generated | Backend UUID; not supplied by the form |
 | `createdAt` | Generated | UTC ISO 8601 timestamp |
 
-Categories: Shelters & Rescues, Emergency Vets, Food Assistance, Pet Supplies,
+Categories: Temporary Foster Services, Emergency Vets, Food Assistance, Pet Supplies,
 Wildlife, Animal Control, Other.
 
 Blank/null optional text and empty animal lists are omitted. Wrong types are
@@ -130,7 +130,7 @@ automatically. EIN/focusAreas are not resource attributes.
 {
   "name": "Example Charity - Denver",
   "partnerId": "c215a75a-31e9-4a44-8f9f-936ec54ca928",
-  "category": "Shelters & Rescues",
+  "category": "Temporary Foster Services",
   "address": "1 Main St, Denver CO 80202",
   "lat": 39.7392,
   "lng": -104.9903,

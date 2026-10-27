@@ -46,7 +46,7 @@ class ChoiceTests(unittest.TestCase):
 
     def test_all_seven_resource_categories_are_accepted(self):
         for category in (
-            "Shelters & Rescues", "Emergency Vets", "Food Assistance",
+            "Temporary Foster Services", "Emergency Vets", "Food Assistance",
             "Pet Supplies", "Wildlife", "Animal Control", "Other",
         ):
             with self.subTest(category=category):

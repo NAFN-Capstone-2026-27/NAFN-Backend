@@ -67,7 +67,7 @@ def run_checks(session, config):
         "focusAreas": ["Domestic Violence", "Climate Emergency"],
     }
     resource = {
-        "name": f"{prefix} Location", "category": "Shelters & Rescues",
+        "name": f"{prefix} Location", "category": "Temporary Foster Services",
         "address": "1 Test St, Denver CO 80202", "lat": 39.7392, "lng": -104.9903,
         "animalsAccepted": ["Dogs", "Cats"], "timeLimits": "Up to 30 days",
     }
