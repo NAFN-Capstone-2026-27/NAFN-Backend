@@ -33,7 +33,8 @@
         "project_name": "NAFN",
         "domain_name": "nafn.us",
         "account": "892077328991",
-        "region": "us-east-1"
+        "region": "us-east-1",
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
       },
       "staging": {
         "certificate_arn": "arn:aws:acm:us-east-2:689508754428:certificate/2932a307-3610-449e-8ec7-b6b3ebe5e82e",
@@ -42,7 +43,8 @@
         "project_name": "NAFN",
         "domain_name": "staging.nafn.us",
         "account": "689508754428",
-        "region": "us-east-1"
+        "region": "us-east-1",
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
       }
     }
   }
