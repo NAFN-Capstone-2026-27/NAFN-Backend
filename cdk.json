@@ -24,7 +24,15 @@
         "domain_name": "dev.nafn.us",
         "account": "463735866782",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
+        "cors_allow_origins": ["*"]
+      },
+      "prod": {
+        "project_name": "NAFN",
+        "domain_name": "PLACEHOLDER",
+        "account": "892077328991",
+        "region": "us-east-1",
+        "cors_allow_origins": ["https://PLACEHOLDER", "https://nafn.us", "https://dev.nafn.us"]
       }
     }
   }
