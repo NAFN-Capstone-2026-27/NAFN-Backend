@@ -40,7 +40,7 @@ project_name = config["project_name"]
 
 env = Environment(account=account, region=region)
 
-# Some super helpful comment
+# Even more helpful comment
 FrontendStack(
     app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
     github_oidc_subject=config["github_oidc_subject"],
