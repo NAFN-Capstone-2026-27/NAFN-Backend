@@ -17,14 +17,32 @@
   "context": {
     "environments": {
       "dev": {
-        "certificate_arn": "arn:aws:acm:us-east-1:463735866782:certificate/2f6e2328-c159-4418-bbbb-b508f709d8ac",
-        "hosted_zone_id": "Z0000178Y51MVGM5V2EM",
-        "hosted_zone_name": "nafn.us",
+        "certificate_arn": "arn:aws:acm:us-east-1:463735866782:certificate/e529de83-219d-4321-b4a5-c77e86e8e1e3",
+        "hosted_zone_id": "Z07072232L5K5IBP7GCJQ",
+        "hosted_zone_name": "dev.nafn.us",
         "project_name": "NAFN", 
         "domain_name": "dev.nafn.us",
         "account": "463735866782",
         "region": "us-east-1",
         "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+      },
+      "prod": {
+        "certificate_arn": "arn:aws:acm:us-east-1:892077328991:certificate/e10f34a3-a761-4480-baf3-bb8e5763aa99",
+        "hosted_zone_id": "Z07102062XWU9U27XYJ8W",
+        "hosted_zone_name": "nafn.us",
+        "project_name": "NAFN",
+        "domain_name": "nafn.us",
+        "account": "892077328991",
+        "region": "us-east-1"
+      },
+      "staging": {
+        "certificate_arn": "arn:aws:acm:us-east-2:689508754428:certificate/2932a307-3610-449e-8ec7-b6b3ebe5e82e",
+        "hosted_zone_id": "Z070700522K1388YDO8T6",
+        "hosted_zone_name": "staging.nafn.us",
+        "project_name": "NAFN",
+        "domain_name": "staging.nafn.us",
+        "account": "689508754428",
+        "region": "us-east-1"
       }
     }
   }
