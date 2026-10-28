@@ -53,7 +53,7 @@ class AppEnvironmentTests(unittest.TestCase):
         api = templates["NAFN-Backend"]["Resources"]["NafnApi5CAE70CD"]
         self.assertEqual(api["Properties"]["CorsConfiguration"]["AllowOrigins"], ["*"])
 
-    def test_prod_backend_configuration_preserves_existing_api_and_cors(self):
+    def test_prod_backend_configuration_preserves_existing_api_and_allows_any_origin(self):
         config = self.config["prod"]
         with tempfile.TemporaryDirectory() as directory:
             app = App(outdir=directory)
@@ -68,9 +68,7 @@ class AppEnvironmentTests(unittest.TestCase):
         resources = template["Resources"]
         self.assertIn("NafnApi5CAE70CD", resources)
         self.assertEqual(resources["NafnApi5CAE70CD"]["Type"], "AWS::ApiGatewayV2::Api")
-        self.assertEqual(resources["NafnApi5CAE70CD"]["Properties"]["CorsConfiguration"]["AllowOrigins"], [
-            "https://PLACEHOLDER", "https://nafn.us", "https://dev.nafn.us",
-        ])
+        self.assertEqual(resources["NafnApi5CAE70CD"]["Properties"]["CorsConfiguration"]["AllowOrigins"], ["*"])
         self.assertFalse(any(r["Type"].startswith(("AWS::CloudFront::", "AWS::Route53::", "AWS::CertificateManager::")) for r in resources.values()))
 
 

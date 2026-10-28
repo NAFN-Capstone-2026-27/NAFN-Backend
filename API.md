@@ -11,6 +11,12 @@ created by the backend. There is no approval workflow or automatic geocoding.
 | Production | `https://w55apwodk0.execute-api.us-east-1.amazonaws.com` |
 | Development | `https://8ud9th48ee.execute-api.us-east-1.amazonaws.com` |
 
+These are the current deployment URLs. Each contains an AWS-generated API ID;
+the URL stays stable across deployments that preserve the API, but changes if
+the API is replaced or the stack is destroyed and recreated. After deployment,
+use the backend stack's `ApiUrl` CloudFormation output as the source of truth
+and update frontend configuration if it changed.
+
 Use the production API URL for all frontend integration for now. Requests use
 the production database, so submitted records are real shared data. The development
 URL is available if separate testing is needed. Append an endpoint below to the
@@ -23,12 +29,7 @@ base URL; there is no `/api` prefix.
 | POST | `/resources` | 201, created resource object |
 | GET | `/resources` | 200, `{ "resources": [...] }` |
 
-- No authentication or API key is required. Listed records include contact details
-  and supplied partner EINs.
-- Development allows browser requests from any origin, including localhost and PR
-  previews. Production currently allows `https://nafn.us` and `https://dev.nafn.us`
-  (plus a legacy `https://PLACEHOLDER` entry). Localhost and PR preview origins
-  cannot call production from a browser without a CORS configuration change.
+- The API is not secure for now: it has no authentication or authorization.
 - Use GET/POST and `Content-Type: application/json`. Do not send cookies with
   `credentials: "include"`; credentialed CORS is not enabled.
 - Send JSON objects. Unknown fields,

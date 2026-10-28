@@ -82,7 +82,7 @@ class NafnBackendStack(Stack):
             cors_preflight=apigw.CorsPreflightOptions(
                 allow_origins=(
                     cors_allow_origins if cors_allow_origins is not None
-                    else [f"https://{domain_name}", "https://nafn.us"]
+                    else ["*"]
                 ),
                 allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
                 allow_headers=["Content-Type"],
