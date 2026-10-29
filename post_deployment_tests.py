@@ -69,29 +69,42 @@ def main():
     results = []
     try:
         status, body = request("POST", partners_url, partner)
-        results.append(check(
-            "POST valid partner returns 201",
-            status == 201
-            and body.get("ein") == ein
-            and body.get("phone") == "3035550100",
-            status, body,
-        ))
+        results.append(
+            check(
+                "POST valid partner returns 201",
+                status == 201
+                and body.get("ein") == ein
+                and body.get("phone") == "3035550100",
+                status,
+                body,
+            )
+        )
 
         status, body = request("POST", partners_url, partner)
-        results.append(check("POST duplicate EIN returns 409", status == 409, status, body))
+        results.append(
+            check("POST duplicate EIN returns 409", status == 409, status, body)
+        )
 
         status, body = request("POST", partners_url, {"name": "Missing fields"})
-        results.append(check(
-            "POST invalid partner returns 400",
-            status == 400 and body.get("errors"),
-            status, body,
-        ))
+        results.append(
+            check(
+                "POST invalid partner returns 400",
+                status == 400 and body.get("errors"),
+                status,
+                body,
+            )
+        )
 
         status, body = request("GET", partners_url)
         eins = {p.get("ein") for p in body.get("partners", [])}
-        results.append(check(
-            "GET lists the dummy partner", status == 200 and ein in eins, status, body
-        ))
+        results.append(
+            check(
+                "GET lists the dummy partner",
+                status == 200 and ein in eins,
+                status,
+                body,
+            )
+        )
     finally:
         delete_dummy_partner(table, ein)
 

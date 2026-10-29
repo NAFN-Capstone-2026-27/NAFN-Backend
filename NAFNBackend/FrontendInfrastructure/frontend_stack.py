@@ -5,7 +5,6 @@ from aws_cdk import (
     Stack,
     aws_cloudfront,
     aws_cloudfront_origins,
-    aws_iam as iam,
     aws_route53,
     aws_route53_targets,
     aws_s3,
@@ -21,13 +20,12 @@ class FrontendStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
+        environment_name: str,
         cert_arn: str,
         hosted_zone_id: str,
         hosted_zone_name: str,
         domain_name: str,
         env: Environment,
-        *,
-        github_oidc_subject: str,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
 
@@ -53,7 +51,7 @@ class FrontendStack(Stack):
             block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
             versioned=False,
             removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
+            auto_delete_objects=True,
         )
 
         # Sign requests that go to the bucket with AWS Signature Version 4
@@ -70,7 +68,10 @@ class FrontendStack(Stack):
                     origin_access_control=s3_oac,
                 ),
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
+                # If the environment is dev, disable caching. Otherwise use caching.
+                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED
+                if environment_name == "dev"
+                else aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
             ),
             domain_names=[domain_name],
             certificate=cert,
@@ -97,39 +98,4 @@ class FrontendStack(Stack):
             ),
         )
 
-        github_provider = iam.CfnOIDCProvider(
-            self,
-            "GitHubOidcProvider",
-            url="https://token.actions.githubusercontent.com",
-            client_id_list=["sts.amazonaws.com"],
-        )
-
-        deploy_role = iam.Role(
-            self,
-            "FrontendDeployRole",
-            description="Deploy the NAFN frontend from GitHub Actions",
-            assumed_by=iam.FederatedPrincipal(
-                federated=github_provider.attr_arn,
-                assume_role_action="sts:AssumeRoleWithWebIdentity",
-                conditions={
-                    "StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": github_oidc_subject,
-                    }
-                },
-            ),
-        )
-        deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:ListBucket"],
-                resources=[s3_bucket.bucket_arn],
-            )
-        )
-        deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:PutObject", "s3:DeleteObject"],
-                resources=[s3_bucket.arn_for_objects("*")],
-            )
-        )
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)
-        CfnOutput(self, "FrontendDeployRoleArn", value=deploy_role.role_arn)

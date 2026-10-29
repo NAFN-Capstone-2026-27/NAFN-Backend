@@ -24,7 +24,7 @@
         "domain_name": "dev.nafn.us",
         "account": "463735866782",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
       },
       "prod": {
         "certificate_arn": "arn:aws:acm:us-east-1:892077328991:certificate/e10f34a3-a761-4480-baf3-bb8e5763aa99",
@@ -34,7 +34,7 @@
         "domain_name": "nafn.us",
         "account": "892077328991",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
       },
       "staging": {
         "certificate_arn": "arn:aws:acm:us-east-1:689508754428:certificate/d0495d3a-437a-42d8-a9a4-6de79713a117",
@@ -44,7 +44,8 @@
         "domain_name": "staging.nafn.us",
         "account": "689508754428",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
+        "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:staging"
       }
     }
   }
