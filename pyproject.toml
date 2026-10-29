@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 include = ["NAFNBackend*"]
 exclude = ["node_modules*"]
 
+[tool.setuptools.package-data]
+"NAFNBackend.FrontendInfrastructure" = ["*.js"]
+
 [project]
 name = "NAFN-Backend"
 version = "0.0"

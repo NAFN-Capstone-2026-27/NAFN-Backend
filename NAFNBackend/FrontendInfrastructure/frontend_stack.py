@@ -1,5 +1,9 @@
+import json
+from pathlib import Path
+
 from aws_cdk import (
     CfnOutput,
+    Duration,
     Environment,
     RemovalPolicy,
     Stack,
@@ -26,12 +30,10 @@ class FrontendStack(Stack):
         hosted_zone_name: str,
         domain_name: str,
         env: Environment,
+        *,
+        enable_previews: bool = False,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
-
-        cert = acm.Certificate.from_certificate_arn(
-            self, "Certificate", certificate_arn=cert_arn
-        )
 
         # Kinda surprised this needs both a hosted_zone_id and hosted_zone_name
         # I would have imagined hosted_zone_id is globally unique like s3
@@ -40,6 +42,10 @@ class FrontendStack(Stack):
             "HostedZone",
             hosted_zone_id=hosted_zone_id,
             zone_name=hosted_zone_name,
+        )
+
+        cert = acm.Certificate.from_certificate_arn(
+            self, "Certificate", certificate_arn=cert_arn
         )
 
         # We wil be using CloudFront origin access control to access the bucket
@@ -54,10 +60,47 @@ class FrontendStack(Stack):
             auto_delete_objects=True,
         )
 
+        if enable_previews:
+            # Expire preview files 30 days after their last upload.
+            s3_bucket.add_lifecycle_rule(
+                id="ExpirePreviewsAfter30Days",
+                expiration=Duration.days(30),
+                prefix="previews/",
+            )
+
         # Sign requests that go to the bucket with AWS Signature Version 4
         s3_oac = aws_cloudfront.S3OriginAccessControl(
             self, "Frontend-S3-OAC", signing=aws_cloudfront.Signing.SIGV4_ALWAYS
         )
+
+        function_associations = []
+        domain_names = (
+            [domain_name, f"*.{domain_name}"]
+            if enable_previews
+            else [domain_name]
+        )
+        if enable_previews:
+            routing_code = Path(__file__).with_name("frontend_router.js").read_text()
+            routing_code = routing_code.replace(
+                "__ROUTING_CONFIG__",
+                json.dumps({
+                    "domainName": domain_name,
+                }),
+            )
+            frontend_router = aws_cloudfront.Function(
+                self,
+                "FrontendRouter",
+                code=aws_cloudfront.FunctionCode.from_inline(routing_code),
+                runtime=aws_cloudfront.FunctionRuntime.JS_2_0,
+                comment="Rewrite SPA routes and route PR preview subdomains",
+            )
+
+            function_associations.append(
+                aws_cloudfront.FunctionAssociation(
+                    function=frontend_router,
+                    event_type=aws_cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            )
 
         distribution = aws_cloudfront.Distribution(
             self,
@@ -72,8 +115,9 @@ class FrontendStack(Stack):
                 cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED
                 if environment_name == "dev"
                 else aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                function_associations=function_associations,
             ),
-            domain_names=[domain_name],
+            domain_names=domain_names,
             certificate=cert,
             default_root_object="index.html",
         )
@@ -97,5 +141,26 @@ class FrontendStack(Stack):
                 aws_route53_targets.CloudFrontTarget(distribution)
             ),
         )
+
+        if enable_previews:
+            aws_route53.ARecord(
+                self,
+                "PreviewARecord",
+                zone=hosted_zone,
+                record_name=f"*.{domain_name}.",
+                target=aws_route53.RecordTarget.from_alias(
+                    aws_route53_targets.CloudFrontTarget(distribution)
+                ),
+            )
+
+            aws_route53.AaaaRecord(
+                self,
+                "PreviewAaaaRecord",
+                zone=hosted_zone,
+                record_name=f"*.{domain_name}.",
+                target=aws_route53.RecordTarget.from_alias(
+                    aws_route53_targets.CloudFrontTarget(distribution)
+                ),
+            )
 
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)

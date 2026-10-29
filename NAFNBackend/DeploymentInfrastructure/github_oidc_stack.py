@@ -21,6 +21,7 @@ class GitHubOidcStack(Stack):
         *,
         frontend_bucket_name: str,
         frontend_github_oidc_subject: str,
+        frontend_preview_github_oidc_subject: str | None = None,
         cdk_deploy_github_oidc_subject: str | None = None,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
@@ -57,6 +58,32 @@ class GitHubOidcStack(Stack):
         )
         CfnOutput(self, "FrontendDeployRoleArn", value=frontend_deploy_role.role_arn)
 
+        # Only environments with frontend PR previews get the preview role.
+        if frontend_preview_github_oidc_subject:
+            preview_role = iam.Role(
+                self,
+                "FrontendPreviewDeployRole",
+                description="Deploy and clean up frontend PR previews from GitHub Actions",
+                # PRs deploy previews; cleanup runs from main when a PR closes.
+                assumed_by=self._github_principal(
+                    [frontend_preview_github_oidc_subject, frontend_github_oidc_subject]
+                ),
+            )
+            preview_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket"],
+                    resources=[frontend_bucket_arn],
+                    conditions={"StringLike": {"s3:prefix": "previews/*"}},
+                )
+            )
+            preview_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    resources=[f"{frontend_bucket_arn}/previews/*"],
+                )
+            )
+            CfnOutput(self, "FrontendPreviewDeployRoleArn", value=preview_role.role_arn)
+
         # Only environments deployed from this repository's GitHub Actions
         # workflow get a role that can deploy the CDK app.
         if cdk_deploy_github_oidc_subject:
@@ -81,7 +108,9 @@ class GitHubOidcStack(Stack):
 
             CfnOutput(self, "CdkDeployRoleArn", value=cdk_deploy_role.role_arn)
 
-    def _github_principal(self, github_oidc_subject: str) -> iam.FederatedPrincipal:
+    def _github_principal(
+        self, github_oidc_subject: str | list[str]
+    ) -> iam.FederatedPrincipal:
         return iam.FederatedPrincipal(
             federated=self.github_provider.attr_arn,
             assume_role_action="sts:AssumeRoleWithWebIdentity",
