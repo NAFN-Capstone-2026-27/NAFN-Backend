@@ -69,9 +69,9 @@ class PreviewPermissionsTests(unittest.TestCase):
         })
         self.assertEqual(objects["Effect"], "Allow")
         self.assertEqual(objects["Resource"], self.preview_objects())
-        self.assertEqual(set(objects["Action"]), {"s3:PutObject", "s3:DeleteObject"})
+        self.assertEqual(objects["Action"], "s3:PutObject")
 
-    def test_preview_role_trusts_only_exact_pr_and_main_subjects(self):
+    def test_preview_role_trusts_only_exact_pr_subject(self):
         provider_ids = [k for k, v in self.resources.items()
                         if v["Type"] == "AWS::IAM::OIDCProvider"]
         self.assertEqual(len(provider_ids), 1)
@@ -84,14 +84,10 @@ class PreviewPermissionsTests(unittest.TestCase):
             "Principal": {"Federated": {"Fn::GetAtt": [provider_ids[0], "Arn"]}},
             "Condition": {"StringEquals": {
                 "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                "token.actions.githubusercontent.com:sub": [
-                    self.config["github_preview_oidc_subject"],
-                    self.config["github_oidc_subject"],
-                ],
+                "token.actions.githubusercontent.com:sub": self.config["github_preview_oidc_subject"],
             }},
         }])
         self.assertTrue(self.config["github_preview_oidc_subject"].endswith(":pull_request"))
-        self.assertTrue(self.config["github_oidc_subject"].endswith(":ref:refs/heads/main"))
 
     def test_dev_preview_routing_and_domains_exist(self):
         self.assertEqual(sum(r["Type"] == "AWS::CloudFront::Function"

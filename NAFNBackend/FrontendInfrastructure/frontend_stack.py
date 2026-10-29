@@ -205,17 +205,14 @@ class FrontendStack(Stack):
             preview_role = iam.Role(
                 self,
                 "FrontendPreviewDeployRole",
-                description="Deploy and clean up frontend PR previews from GitHub Actions",
+                description="Deploy frontend PR previews from GitHub Actions",
                 assumed_by=iam.FederatedPrincipal(
                     federated=github_provider.attr_arn,
                     assume_role_action="sts:AssumeRoleWithWebIdentity",
                     conditions={
                         "StringEquals": {
                             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                            "token.actions.githubusercontent.com:sub": [
-                                github_preview_oidc_subject,
-                                github_oidc_subject,
-                            ],
+                            "token.actions.githubusercontent.com:sub": github_preview_oidc_subject,
                         }
                     },
                 ),
@@ -229,7 +226,7 @@ class FrontendStack(Stack):
             )
             preview_role.add_to_policy(
                 iam.PolicyStatement(
-                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    actions=["s3:PutObject"],
                     resources=[s3_bucket.arn_for_objects("previews/*")],
                 )
             )

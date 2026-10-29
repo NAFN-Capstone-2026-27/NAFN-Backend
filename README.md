@@ -76,12 +76,10 @@ Preview URLs use `pr-<number>.dev.nafn.us`.
 ## GitHub Actions authentication
 
 The main deployment role can list the website bucket and upload/delete its objects.
-The preview role can list/upload/delete only under `previews/` and is shared by
-preview deployment and cleanup. Both roles use the same GitHub OIDC provider.
+The preview role can list/upload only under `previews/` and trusts only the PR
+subject. Both roles use the same GitHub OIDC provider.
 
-The preview role trusts both PR and `main` subjects. Cleanup uses `main`, for a `pull_request_target` workflow handling
-closed PRs from the default branch (`main`). That workflow must never check out or
-execute PR code. PR preview deployment uses `pull_request` without a GitHub
+PR preview deployment uses `pull_request` without a GitHub
 environment; restrict it to same-repository PRs in the workflow. Preview access is
 shared across PR prefixes; the workflow must select the correct PR folder.
 
