@@ -47,10 +47,8 @@ FrontendStack(
 
 NafnBackendStack(
     app,
-    f"{project_name}-Backend",
-    domain_name,
-    env=env,
-)
+    f"{project_name}-Backend", domain_name,
+        env=env,)
 
 
 app.synth()

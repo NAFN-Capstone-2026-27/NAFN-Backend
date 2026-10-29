@@ -2,14 +2,13 @@ name: Ruff
 
 on:
   pull_request:
-  push:
 
 permissions:
   contents: read
 
 jobs:
-  ruff:
-    name: Ruff lint and formatting
+  ruff-lint:
+    name: Ruff Lint
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -21,6 +20,14 @@ jobs:
         with:
           version-file: pyproject.toml
           args: check --output-format=github
+
+  ruff-check:
+    name: Ruff Format Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Check formatting
         if: ${{ !cancelled() }}
