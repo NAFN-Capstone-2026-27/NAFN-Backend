@@ -32,14 +32,13 @@ class FrontendStack(Stack):
         *,
         github_oidc_subject: str,
         enable_previews: bool = False,
-        preview_domain_name: str | None = None,
         github_preview_oidc_subject: str | None = None,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
 
-        if enable_previews and not (preview_domain_name and github_preview_oidc_subject):
+        if enable_previews and not github_preview_oidc_subject:
             raise ValueError(
-                "Enabled previews require preview_domain_name and github_preview_oidc_subject"
+                "Enabled previews require github_preview_oidc_subject"
             )
 
         # Kinda surprised this needs both a hosted_zone_id and hosted_zone_name
@@ -75,26 +74,25 @@ class FrontendStack(Stack):
         function_associations = []
         domain_names = [domain_name]
         if enable_previews:
-            routing_code = Path(__file__).with_name("preview_router.js").read_text()
+            routing_code = Path(__file__).with_name("frontend_router.js").read_text()
             routing_code = routing_code.replace(
                 "__ROUTING_CONFIG__",
                 json.dumps({
                     "domainName": domain_name,
-                    "previewDomainName": preview_domain_name,
                 }),
             )
-            preview_router = aws_cloudfront.Function(
+            frontend_router = aws_cloudfront.Function(
                 self,
-                "PreviewRouter",
+                "FrontendRouter",
                 code=aws_cloudfront.FunctionCode.from_inline(routing_code),
                 runtime=aws_cloudfront.FunctionRuntime.JS_2_0,
-                comment="Route preview subdomains to their PR folders",
+                comment="Rewrite SPA routes and route PR preview subdomains",
             )
 
-            domain_names.append(f"*.{preview_domain_name}")
+            domain_names.append(f"*.{domain_name}")
             function_associations.append(
                 aws_cloudfront.FunctionAssociation(
-                    function=preview_router,
+                    function=frontend_router,
                     event_type=aws_cloudfront.FunctionEventType.VIEWER_REQUEST,
                 )
             )
@@ -141,7 +139,7 @@ class FrontendStack(Stack):
                 self,
                 "PreviewARecord",
                 zone=hosted_zone,
-                record_name=f"*.{preview_domain_name}.",
+                record_name=f"*.{domain_name}.",
                 target=aws_route53.RecordTarget.from_alias(
                     aws_route53_targets.CloudFrontTarget(distribution)
                 ),
@@ -151,7 +149,7 @@ class FrontendStack(Stack):
                 self,
                 "PreviewAaaaRecord",
                 zone=hosted_zone,
-                record_name=f"*.{preview_domain_name}.",
+                record_name=f"*.{domain_name}.",
                 target=aws_route53.RecordTarget.from_alias(
                     aws_route53_targets.CloudFrontTarget(distribution)
                 ),

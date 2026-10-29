@@ -23,7 +23,6 @@ class PreviewPermissionsTests(unittest.TestCase):
             config["hosted_zone_name"], config["domain_name"],
             Environment(account=config["account"], region=config["region"]),
             enable_previews=config["enable_previews"],
-            preview_domain_name=config["preview_domain_name"],
             github_oidc_subject=config["github_oidc_subject"],
             github_preview_oidc_subject=config["github_preview_oidc_subject"],
         )
@@ -105,7 +104,15 @@ class PreviewPermissionsTests(unittest.TestCase):
         self.assertFalse(any(r["Type"] == "AWS::CertificateManager::Certificate"
                              for r in self.resources.values()))
         self.assertEqual(distribution["Aliases"], [
-            self.config["domain_name"], f"*.{self.config['preview_domain_name']}"
+            self.config["domain_name"], f"*.{self.config['domain_name']}"
+        ])
+        records = [r["Properties"]["Name"] for r in self.resources.values()
+                   if r["Type"] == "AWS::Route53::RecordSet"]
+        self.assertCountEqual(records, [
+            f"{self.config['domain_name']}.",
+            f"{self.config['domain_name']}.",
+            f"*.{self.config['domain_name']}.",
+            f"*.{self.config['domain_name']}.",
         ])
         self.assertEqual(len(distribution["DefaultCacheBehavior"]["FunctionAssociations"]), 1)
 
@@ -133,7 +140,6 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     Environment(account=config["account"], region=config["region"]),
                     github_oidc_subject=config["github_oidc_subject"],
                     enable_previews=config.get("enable_previews", False),
-                    preview_domain_name=config.get("preview_domain_name"),
                     github_preview_oidc_subject=config.get("github_preview_oidc_subject"),
                 )
                 template = Template.from_stack(stack).to_json()

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const source = readFileSync(join(
-    __dirname, '../NAFNBackend/FrontendInfrastructure/preview_router.js'
+    __dirname, '../NAFNBackend/FrontendInfrastructure/frontend_router.js'
 ), 'utf8').replace('__ROUTING_CONFIG__', JSON.stringify({
     domainName: 'dev.nafn.us'
 }));
@@ -46,9 +46,20 @@ test('different PRs map to different prefixes; hostname case is normalized', () 
         '/previews/pr-12/index.html');
 });
 
-test('development and distribution URL requests pass through unchanged', () => {
+test('development and distribution page routes use the root index on navigation and refresh', () => {
+    for (const host of ['dev.nafn.us', 'DEV.NAFN.US', 'example.cloudfront.net']) {
+        for (const uri of ['/', '/about', '/about/', '/need-help', '/nested/page']) {
+            const input = event(host, uri);
+            assert.strictEqual(context.handler(input), input.request);
+            assert.equal(input.request.uri, '/index.html');
+        }
+    }
+});
+
+test('development and distribution assets and files keep their paths', () => {
     for (const host of ['dev.nafn.us', 'example.cloudfront.net']) {
-        for (const uri of ['/', '/about', '/assets/app.js']) {
+        for (const uri of ['/assets', '/assets/app.js', '/assets/app.css',
+            '/assets/missing', '/assets/logo.png', '/favicon.ico', '/index.html']) {
             const input = event(host, uri);
             assert.strictEqual(context.handler(input), input.request);
             assert.equal(input.request.uri, uri);
@@ -57,11 +68,13 @@ test('development and distribution URL requests pass through unchanged', () => {
 });
 
 test('query strings, cookies, headers and methods survive rewriting', () => {
-    const input = event('pr-12.dev.nafn.us', '/about');
-    input.request.method = 'HEAD';
-    const original = structuredClone(input.request);
-    const result = context.handler(input);
-    assert.deepEqual({ ...result, uri: original.uri }, original);
+    for (const host of ['pr-12.dev.nafn.us', 'dev.nafn.us', 'example.cloudfront.net']) {
+        const input = event(host, '/about');
+        input.request.method = 'HEAD';
+        const original = structuredClone(input.request);
+        const result = context.handler(input);
+        assert.deepEqual({ ...result, uri: original.uri }, original);
+    }
 });
 
 test('invalid or missing preview hosts return 404', () => {
@@ -75,10 +88,12 @@ test('invalid or missing preview hosts return 404', () => {
     assert.equal(context.handler(missingHost).statusCode, 404);
 });
 
-test('malformed encodings and traversal cannot escape the PR prefix', () => {
-    for (const uri of ['/../index.html', '/assets/../../index.html',
-        '/%2e%2e/index.html', '/assets%2f..%2findex.html',
-        '/%252e%252e/index.html', '/assets/..\\index.html', '/bad%ZZ.js']) {
-        assert.equal(context.handler(event('pr-12.dev.nafn.us', uri)).statusCode, 404);
+test('all supported hosts reject malformed encodings and traversal', () => {
+    for (const host of ['pr-12.dev.nafn.us', 'dev.nafn.us', 'example.cloudfront.net']) {
+        for (const uri of ['/../index.html', '/assets/../../index.html',
+            '/%2e%2e/index.html', '/assets%2f..%2findex.html',
+            '/%252e%252e/index.html', '/assets/..\\index.html', '/bad%ZZ.js']) {
+            assert.equal(context.handler(event(host, uri)).statusCode, 404);
+        }
     }
 });

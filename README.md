@@ -68,6 +68,8 @@ The only environment defined right now is `dev`, which serves `dev.nafn.us`. To 
 
 CloudFront uses the existing certificate configured for each environment. Preview requests
 use their PR's files and `index.html`; asset requests stay within that PR's prefix.
+The same routing function serves the root `index.html` for extensionless React
+routes on the dev domain and CloudFront distribution hostname, preserving asset paths.
 
 Preview URLs use `pr-<number>.dev.nafn.us`.
 
@@ -123,7 +125,7 @@ Because it creates and deletes records, the script only runs against environment
 
 ## Other useful commands
 
-- `node --test tests/preview_router.test.cjs` tests preview routing locally
+- `node --test tests/frontend_router.test.cjs` tests SPA and preview routing locally
 - `python -m unittest tests.test_preview_permissions` tests deployment permission boundaries
 
 - `cdk ls -c env=dev` lists the stacks in the app
