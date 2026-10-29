@@ -3,6 +3,7 @@ from pathlib import Path
 
 from aws_cdk import (
     CfnOutput,
+    Duration,
     Environment,
     RemovalPolicy,
     Stack,
@@ -66,13 +67,25 @@ class FrontendStack(Stack):
             auto_delete_objects=True
         )
 
+        if enable_previews:
+            # Expire preview files 30 days after their last upload.
+            s3_bucket.add_lifecycle_rule(
+                id="ExpirePreviewsAfter30Days",
+                expiration=Duration.days(30),
+                prefix="previews/",
+            )
+
         # Sign requests that go to the bucket with AWS Signature Version 4
         s3_oac = aws_cloudfront.S3OriginAccessControl(
             self, "Frontend-S3-OAC", signing=aws_cloudfront.Signing.SIGV4_ALWAYS
         )
 
         function_associations = []
-        domain_names = [domain_name]
+        domain_names = (
+            [domain_name, f"*.{domain_name}"]
+            if enable_previews
+            else [domain_name]
+        )
         if enable_previews:
             routing_code = Path(__file__).with_name("frontend_router.js").read_text()
             routing_code = routing_code.replace(
@@ -89,7 +102,6 @@ class FrontendStack(Stack):
                 comment="Rewrite SPA routes and route PR preview subdomains",
             )
 
-            domain_names.append(f"*.{domain_name}")
             function_associations.append(
                 aws_cloudfront.FunctionAssociation(
                     function=frontend_router,

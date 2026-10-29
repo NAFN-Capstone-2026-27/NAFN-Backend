@@ -116,6 +116,15 @@ class PreviewPermissionsTests(unittest.TestCase):
         ])
         self.assertEqual(len(distribution["DefaultCacheBehavior"]["FunctionAssociations"]), 1)
 
+    def test_expiration_is_scoped_to_preview_files(self):
+        rules = self.resources[self.bucket_id]["Properties"]["LifecycleConfiguration"]["Rules"]
+        self.assertEqual(rules, [{
+            "Id": "ExpirePreviewsAfter30Days",
+            "Status": "Enabled",
+            "Prefix": "previews/",
+            "ExpirationInDays": 30,
+        }])
+
     def test_only_shared_preview_role_output_exists(self):
         role_id = self.resource_ids["PermissionsTest/FrontendPreviewDeployRole/Resource"]
         self.assertEqual(self.template["Outputs"]["FrontendPreviewDeployRoleArn"]["Value"],
@@ -144,6 +153,9 @@ class PreviewEnvironmentTests(unittest.TestCase):
                 )
                 template = Template.from_stack(stack).to_json()
                 resources = list(template["Resources"].values())
+                bucket = next(r["Properties"] for r in resources
+                              if r["Type"] == "AWS::S3::Bucket")
+                self.assertNotIn("LifecycleConfiguration", bucket)
                 self.assertFalse(any(r["Type"] == "AWS::CloudFront::Function"
                                      for r in resources))
                 distribution = next(r["Properties"]["DistributionConfig"]

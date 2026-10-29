@@ -85,6 +85,10 @@ execute PR code. PR preview deployment uses `pull_request` without a GitHub
 environment; restrict it to same-repository PRs in the workflow. Preview access is
 shared across PR prefixes; the workflow must select the correct PR folder.
 
+When previews are enabled, S3 expires files under `previews/` 30 days after
+their last upload, regardless of whether the PR is still open. Expiration is
+asynchronous and does not affect the main website files.
+
 After deployment, set these variables in the frontend GitHub repository:
 
 | CDK output | GitHub variable |
