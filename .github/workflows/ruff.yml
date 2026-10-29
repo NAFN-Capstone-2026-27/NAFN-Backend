@@ -19,7 +19,7 @@ jobs:
         uses: astral-sh/ruff-action@v4.1.0
         with:
           version-file: pyproject.toml
-          args: check --output-format=github
+          args: check --output-format=github --diff
 
   ruff-check:
     name: Ruff Format Check
