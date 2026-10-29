@@ -30,7 +30,7 @@ def handler(event, context):
             Item=partner,
             ConditionExpression="attribute_not_exists(ein)",
         )
-    except table.meta.client.exceptions.ConditionalCheckFailedException:
+    except Exception:
         return _response(409, {"error": "A partner with this EIN already exists."})
 
     return _response(201, partner)
