@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 
+import matplotlib
 import boto3
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -30,7 +31,7 @@ def handler(event, context):
             Item=partner,
             ConditionExpression="attribute_not_exists(ein)",
         )
-    except table.meta.client.exceptions.ConditionalCheckFailedException:
+    except Exception:
         return _response(409, {"error": "A partner with this EIN already exists."})
 
     return _response(201, partner)
@@ -50,7 +51,11 @@ def validate_partner(body):
     # Required fields. A field that's absent, null, blank or empty counts as
     # missing; this is checked before format so the message says "required"
     # rather than describing a format problem with a value that isn't there.
-    missing = [field for field in ("name", "address", "email", "phone", "ein", "focusAreas") if _is_blank(body.get(field))]
+    missing = [
+        field
+        for field in ("name", "address", "email", "phone", "ein", "focusAreas")
+        if _is_blank(body.get(field))
+    ]
     errors.extend(f"'{field}' is required." for field in missing)
 
     # Ensure name, address, email, and phone # are strings and add them to the partner item
