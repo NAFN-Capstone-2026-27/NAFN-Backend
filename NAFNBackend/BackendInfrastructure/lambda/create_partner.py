@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 
+import matplotlib
 import boto3
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
