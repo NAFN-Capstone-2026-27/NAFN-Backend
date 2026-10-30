@@ -36,9 +36,7 @@ class FrontendStack(Stack):
         super().__init__(scope, construct_id, env=env)
 
         if enable_previews and not github_preview_oidc_subject:
-            raise ValueError(
-                "Enabled previews require github_preview_oidc_subject"
-            )
+            raise ValueError("Enabled previews require github_preview_oidc_subject")
 
         # Kinda surprised this needs both a hosted_zone_id and hosted_zone_name
         # I would have imagined hosted_zone_id is globally unique like s3
@@ -80,17 +78,17 @@ class FrontendStack(Stack):
 
         function_associations = []
         domain_names = (
-            [domain_name, f"*.{domain_name}"]
-            if enable_previews
-            else [domain_name]
+            [domain_name, f"*.{domain_name}"] if enable_previews else [domain_name]
         )
         if enable_previews:
             routing_code = Path(__file__).with_name("frontend_router.js").read_text()
             routing_code = routing_code.replace(
                 "__ROUTING_CONFIG__",
-                json.dumps({
-                    "domainName": domain_name,
-                }),
+                json.dumps(
+                    {
+                        "domainName": domain_name,
+                    }
+                ),
             )
             frontend_router = aws_cloudfront.Function(
                 self,

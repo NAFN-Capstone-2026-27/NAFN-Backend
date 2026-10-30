@@ -35,7 +35,13 @@ project_name = config["project_name"]
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, f"{project_name}-Frontend", cert_arn, hosted_zone_id, hosted_zone_name, domain_name, env,
+    app,
+    f"{project_name}-Frontend",
+    cert_arn,
+    hosted_zone_id,
+    hosted_zone_name,
+    domain_name,
+    env,
     enable_previews=config.get("enable_previews", False),
     github_oidc_subject=config["github_oidc_subject"],
     github_preview_oidc_subject=config.get("github_preview_oidc_subject"),
