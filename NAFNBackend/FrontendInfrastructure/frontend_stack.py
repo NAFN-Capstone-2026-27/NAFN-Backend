@@ -7,14 +7,12 @@ from aws_cdk import (
     Environment,
     RemovalPolicy,
     Stack,
+    aws_certificatemanager as acm,
     aws_cloudfront,
     aws_cloudfront_origins,
     aws_route53,
     aws_route53_targets,
     aws_s3,
-)
-from aws_cdk import (
-    aws_certificatemanager as acm,
 )
 from constructs import Construct
 
@@ -75,17 +73,17 @@ class FrontendStack(Stack):
 
         function_associations = []
         domain_names = (
-            [domain_name, f"*.{domain_name}"]
-            if enable_previews
-            else [domain_name]
+            [domain_name, f"*.{domain_name}"] if enable_previews else [domain_name]
         )
         if enable_previews:
             routing_code = Path(__file__).with_name("frontend_router.js").read_text()
             routing_code = routing_code.replace(
                 "__ROUTING_CONFIG__",
-                json.dumps({
-                    "domainName": domain_name,
-                }),
+                json.dumps(
+                    {
+                        "domainName": domain_name,
+                    }
+                ),
             )
             frontend_router = aws_cloudfront.Function(
                 self,

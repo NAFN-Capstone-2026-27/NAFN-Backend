@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 
@@ -24,7 +24,7 @@ def handler(event, context):
     if errors:
         return _response(400, {"errors": errors})
 
-    partner["createdAt"] = datetime.now(timezone.utc).isoformat()
+    partner["createdAt"] = datetime.now(UTC).isoformat()
     try:
         table.put_item(
             Item=partner,

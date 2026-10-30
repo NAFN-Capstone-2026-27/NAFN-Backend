@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from aws_cdk import App, Environment
 import aws_cdk
+from aws_cdk import App, Environment
 
-from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
 from NAFNBackend.DeploymentInfrastructure.github_oidc_stack import GitHubOidcStack
+from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 
 app = App()
 
@@ -33,7 +33,9 @@ hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
 project_name = config["project_name"]
 enable_previews = config.get("enable_previews", False)
-frontend_preview_github_oidc_subject = config.get("frontend_preview_github_oidc_subject")
+frontend_preview_github_oidc_subject = config.get(
+    "frontend_preview_github_oidc_subject"
+)
 
 if enable_previews and not frontend_preview_github_oidc_subject:
     raise ValueError("Enabled previews require frontend_preview_github_oidc_subject")
