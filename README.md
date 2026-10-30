@@ -48,6 +48,30 @@ $ pip install .
 
 To add dependencies, add them to the `dependencies` list in `pyproject.toml` and run `pip install .` again.
 
+## Linting and formatting
+
+Install the development tools into your activated virtualenv:
+
+```bash
+pip install -e '.[dev]'
+```
+
+Run the same checks as CI from the repository root:
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+To apply automatic fixes and formatting locally:
+
+```bash
+ruff check --fix .
+ruff format .
+```
+
+Shared settings and the pinned Ruff version live in `pyproject.toml`.
+
 ## Environments
 
 Per-environment settings live under `context.environments` in `cdk.json`. Each environment needs:
