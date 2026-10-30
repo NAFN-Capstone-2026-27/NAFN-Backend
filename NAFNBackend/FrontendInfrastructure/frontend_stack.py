@@ -10,7 +10,6 @@ from aws_cdk import (
     aws_certificatemanager as acm,
     aws_cloudfront,
     aws_cloudfront_origins,
-    aws_iam as iam,
     aws_route53,
     aws_route53_targets,
     aws_s3,
@@ -23,20 +22,16 @@ class FrontendStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
+        environment_name: str,
         cert_arn: str,
         hosted_zone_id: str,
         hosted_zone_name: str,
         domain_name: str,
         env: Environment,
         *,
-        github_oidc_subject: str,
         enable_previews: bool = False,
-        github_preview_oidc_subject: str | None = None,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
-
-        if enable_previews and not github_preview_oidc_subject:
-            raise ValueError("Enabled previews require github_preview_oidc_subject")
 
         # Kinda surprised this needs both a hosted_zone_id and hosted_zone_name
         # I would have imagined hosted_zone_id is globally unique like s3
@@ -114,7 +109,10 @@ class FrontendStack(Stack):
                     origin_access_control=s3_oac,
                 ),
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
+                # If the environment is dev, disable caching. Otherwise use caching.
+                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED
+                if environment_name == "dev"
+                else aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
                 function_associations=function_associations,
             ),
             domain_names=domain_names,
@@ -163,70 +161,4 @@ class FrontendStack(Stack):
                 ),
             )
 
-        github_provider = iam.CfnOIDCProvider(
-            self,
-            "GitHubOidcProvider",
-            url="https://token.actions.githubusercontent.com",
-            client_id_list=["sts.amazonaws.com"],
-        )
-
-        deploy_role = iam.Role(
-            self,
-            "FrontendDeployRole",
-            description="Deploy the NAFN frontend from GitHub Actions",
-            assumed_by=iam.FederatedPrincipal(
-                federated=github_provider.attr_arn,
-                assume_role_action="sts:AssumeRoleWithWebIdentity",
-                conditions={
-                    "StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": github_oidc_subject,
-                    }
-                },
-            ),
-        )
-        deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:ListBucket"],
-                resources=[s3_bucket.bucket_arn],
-            )
-        )
-        deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:PutObject", "s3:DeleteObject"],
-                resources=[s3_bucket.arn_for_objects("*")],
-            )
-        )
-        if enable_previews:
-            preview_role = iam.Role(
-                self,
-                "FrontendPreviewDeployRole",
-                description="Deploy frontend PR previews from GitHub Actions",
-                assumed_by=iam.FederatedPrincipal(
-                    federated=github_provider.attr_arn,
-                    assume_role_action="sts:AssumeRoleWithWebIdentity",
-                    conditions={
-                        "StringEquals": {
-                            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                            "token.actions.githubusercontent.com:sub": github_preview_oidc_subject,
-                        }
-                    },
-                ),
-            )
-            preview_role.add_to_policy(
-                iam.PolicyStatement(
-                    actions=["s3:ListBucket"],
-                    resources=[s3_bucket.bucket_arn],
-                    conditions={"StringLike": {"s3:prefix": "previews/*"}},
-                )
-            )
-            preview_role.add_to_policy(
-                iam.PolicyStatement(
-                    actions=["s3:PutObject"],
-                    resources=[s3_bucket.arn_for_objects("previews/*")],
-                )
-            )
-            CfnOutput(self, "FrontendPreviewDeployRoleArn", value=preview_role.role_arn)
-
         CfnOutput(self, "S3FrontendBucket", value=s3_bucket.bucket_name)
-        CfnOutput(self, "FrontendDeployRoleArn", value=deploy_role.role_arn)

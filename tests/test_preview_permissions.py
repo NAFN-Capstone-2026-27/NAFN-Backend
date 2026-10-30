@@ -6,6 +6,7 @@ from pathlib import Path
 from aws_cdk import App, CfnResource, Environment
 from aws_cdk.assertions import Template
 
+from NAFNBackend.DeploymentInfrastructure.github_oidc_stack import GitHubOidcStack
 from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 
 
@@ -18,23 +19,34 @@ class PreviewPermissionsTests(unittest.TestCase):
         cls.config = config
         cls.output_dir = tempfile.TemporaryDirectory()
         app = App(outdir=cls.output_dir.name)
-        stack = FrontendStack(
+        env = Environment(account=config["account"], region=config["region"])
+        frontend_stack = FrontendStack(
             app,
-            "PermissionsTest",
+            "FrontendTest",
+            "dev",
             config["certificate_arn"],
             config["hosted_zone_id"],
             config["hosted_zone_name"],
             config["domain_name"],
-            Environment(account=config["account"], region=config["region"]),
+            env,
             enable_previews=config["enable_previews"],
-            github_oidc_subject=config["github_oidc_subject"],
-            github_preview_oidc_subject=config["github_preview_oidc_subject"],
         )
-        cls.template = Template.from_stack(stack).to_json()
-        cls.resources = cls.template["Resources"]
+        oidc_stack = GitHubOidcStack(
+            app,
+            "PermissionsTest",
+            env,
+            frontend_bucket_name=config["domain_name"],
+            frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
+            frontend_preview_github_oidc_subject=config[
+                "frontend_preview_github_oidc_subject"
+            ],
+        )
+        cls.resources = Template.from_stack(frontend_stack).to_json()["Resources"]
+        cls.oidc_template = Template.from_stack(oidc_stack).to_json()
+        cls.oidc_resources = cls.oidc_template["Resources"]
         cls.resource_ids = {
-            construct.node.path: stack.get_logical_id(construct)
-            for construct in stack.node.find_all()
+            construct.node.path: oidc_stack.get_logical_id(construct)
+            for construct in oidc_stack.node.find_all()
             if isinstance(construct, CfnResource)
         }
         cls.bucket_id = next(
@@ -42,13 +54,15 @@ class PreviewPermissionsTests(unittest.TestCase):
             for key, value in cls.resources.items()
             if value["Type"] == "AWS::S3::Bucket"
         )
+        # The OIDC stack names the bucket by its domain rather than referencing it.
+        cls.bucket_arn = f"arn:aws:s3:::{config['domain_name']}"
 
     @classmethod
     def tearDownClass(cls):
         cls.output_dir.cleanup()
 
     def resource(self, path, resource_type):
-        resource = self.resources[self.resource_ids[path]]
+        resource = self.oidc_resources[self.resource_ids[path]]
         self.assertEqual(resource["Type"], resource_type)
         return resource["Properties"]
 
@@ -58,9 +72,7 @@ class PreviewPermissionsTests(unittest.TestCase):
         )["PolicyDocument"]["Statement"]
 
     def preview_objects(self):
-        return {
-            "Fn::Join": ["", [{"Fn::GetAtt": [self.bucket_id, "Arn"]}, "/previews/*"]]
-        }
+        return f"{self.bucket_arn}/previews/*"
 
     def test_preview_role_cannot_list_root_or_write_outside_previews(self):
         statements = self.policy("FrontendPreviewDeployRole")
@@ -68,7 +80,7 @@ class PreviewPermissionsTests(unittest.TestCase):
         listing, objects = statements
         self.assertEqual(listing["Effect"], "Allow")
         self.assertEqual(listing["Action"], "s3:ListBucket")
-        self.assertEqual(listing["Resource"], {"Fn::GetAtt": [self.bucket_id, "Arn"]})
+        self.assertEqual(listing["Resource"], self.bucket_arn)
         self.assertEqual(
             listing["Condition"], {"StringLike": {"s3:prefix": "previews/*"}}
         )
@@ -79,7 +91,7 @@ class PreviewPermissionsTests(unittest.TestCase):
     def test_preview_role_trusts_only_exact_pr_subject(self):
         provider_ids = [
             k
-            for k, v in self.resources.items()
+            for k, v in self.oidc_resources.items()
             if v["Type"] == "AWS::IAM::OIDCProvider"
         ]
         self.assertEqual(len(provider_ids), 1)
@@ -99,7 +111,7 @@ class PreviewPermissionsTests(unittest.TestCase):
                         "StringEquals": {
                             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
                             "token.actions.githubusercontent.com:sub": self.config[
-                                "github_preview_oidc_subject"
+                                "frontend_preview_github_oidc_subject"
                             ],
                         }
                     },
@@ -107,7 +119,9 @@ class PreviewPermissionsTests(unittest.TestCase):
             ],
         )
         self.assertTrue(
-            self.config["github_preview_oidc_subject"].endswith(":pull_request")
+            self.config["frontend_preview_github_oidc_subject"].endswith(
+                ":pull_request"
+            )
         )
 
     def test_dev_preview_routing_and_domains_exist(self):
@@ -176,10 +190,10 @@ class PreviewPermissionsTests(unittest.TestCase):
             "PermissionsTest/FrontendPreviewDeployRole/Resource"
         ]
         self.assertEqual(
-            self.template["Outputs"]["FrontendPreviewDeployRoleArn"]["Value"],
+            self.oidc_template["Outputs"]["FrontendPreviewDeployRoleArn"]["Value"],
             {"Fn::GetAtt": [role_id, "Arn"]},
         )
-        self.assertNotIn("FrontendPreviewCleanupRoleArn", self.template["Outputs"])
+        self.assertNotIn("FrontendPreviewCleanupRoleArn", self.oidc_template["Outputs"])
         self.assertNotIn(
             "PermissionsTest/FrontendPreviewCleanupRole/Resource", self.resource_ids
         )
@@ -197,23 +211,33 @@ class PreviewEnvironmentTests(unittest.TestCase):
             ):
                 config = environments[name]
                 self.assertFalse(config.get("enable_previews", False))
+                self.assertNotIn("frontend_preview_github_oidc_subject", config)
                 app = App(outdir=outdir)
+                env = Environment(account=config["account"], region=config["region"])
                 stack = FrontendStack(
                     app,
                     f"{name}Test",
+                    name,
                     config["certificate_arn"],
                     config["hosted_zone_id"],
                     config["hosted_zone_name"],
                     config["domain_name"],
-                    Environment(account=config["account"], region=config["region"]),
-                    github_oidc_subject=config["github_oidc_subject"],
+                    env,
                     enable_previews=config.get("enable_previews", False),
-                    github_preview_oidc_subject=config.get(
-                        "github_preview_oidc_subject"
+                )
+                oidc_stack = GitHubOidcStack(
+                    app,
+                    f"{name}OidcTest",
+                    env,
+                    frontend_bucket_name=config["domain_name"],
+                    frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
+                    frontend_preview_github_oidc_subject=config.get(
+                        "frontend_preview_github_oidc_subject"
                     ),
                 )
                 template = Template.from_stack(stack).to_json()
                 resources = list(template["Resources"].values())
+                oidc_template = Template.from_stack(oidc_stack).to_json()
                 bucket = next(
                     r["Properties"] for r in resources if r["Type"] == "AWS::S3::Bucket"
                 )
@@ -247,13 +271,17 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     )
                 )
                 roles = [
-                    r["Properties"] for r in resources if r["Type"] == "AWS::IAM::Role"
+                    r["Properties"]
+                    for r in oidc_template["Resources"].values()
+                    if r["Type"] == "AWS::IAM::Role"
                 ]
                 self.assertFalse(
                     any("preview" in r.get("Description", "").lower() for r in roles)
                 )
-                self.assertFalse(any("Preview" in key for key in template["Outputs"]))
-                self.assertIn("FrontendDeployRoleArn", template["Outputs"])
+                self.assertFalse(
+                    any("Preview" in key for key in oidc_template["Outputs"])
+                )
+                self.assertIn("FrontendDeployRoleArn", oidc_template["Outputs"])
 
 
 if __name__ == "__main__":
