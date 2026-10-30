@@ -3,6 +3,7 @@ name: Ruff
 on:
   pull_request:
   push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -12,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ruff:
-    name: Ruff lint and formatting
+  lint:
+    name: Ruff lint
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -26,9 +27,16 @@ jobs:
           version-file: pyproject.toml
           args: check --output-format=github
 
+  format:
+    name: Ruff formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Check formatting
-        if: ${{ !cancelled() }}
         uses: astral-sh/ruff-action@v4.1.0
         with:
           version-file: pyproject.toml
-          args: format --check --diff
+          args: format --check --output-format=github
