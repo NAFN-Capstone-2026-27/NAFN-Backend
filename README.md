@@ -19,7 +19,7 @@ AWS CDK (Python) infrastructure for NAFN.
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
   - A frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
-  - A frontend preview role, restricted to `frontend_preview_github_oidc_subject` and `frontend_github_oidc_subject`, that can upload to and delete from only `previews/` in the website bucket. Only created for environments that set `frontend_preview_github_oidc_subject` (currently just `dev`)
+  - A frontend preview role, restricted to `frontend_preview_github_oidc_subject`, that can upload to only `previews/` in the website bucket. Only created for environments that set `frontend_preview_github_oidc_subject` (currently just `dev`)
   - A CDK deployment role, restricted to `cdk_deploy_github_oidc_subject`, that can run `cdk deploy --all` by assuming the CDK bootstrap roles. Only created for environments that set `cdk_deploy_github_oidc_subject` (currently just `staging`)
   - Outputs `FrontendDeployRoleArn`, plus `FrontendPreviewDeployRoleArn` and `CdkDeployRoleArn` when those roles exist
 
@@ -83,12 +83,10 @@ Preview URLs use `pr-<number>.dev.nafn.us`.
 ## GitHub Actions authentication
 
 The frontend deployment role can list the website bucket and upload/delete its objects.
-The preview role can list/upload/delete only under `previews/` and is shared by
-preview deployment and cleanup. Both roles live in `NAFN-GitHubOidc` and use its GitHub OIDC provider.
+The preview role can list/upload only under `previews/` and trusts only the PR
+subject. Both roles live in `NAFN-GitHubOidc` and use its GitHub OIDC provider.
 
-The preview role trusts both PR and `main` subjects. Cleanup uses `main`, for a `pull_request_target` workflow handling
-closed PRs from the default branch (`main`). That workflow must never check out or
-execute PR code. PR preview deployment uses `pull_request` without a GitHub
+PR preview deployment uses `pull_request` without a GitHub
 environment; restrict it to same-repository PRs in the workflow. Preview access is
 shared across PR prefixes; the workflow must select the correct PR folder.
 

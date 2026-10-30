@@ -63,11 +63,8 @@ class GitHubOidcStack(Stack):
             preview_role = iam.Role(
                 self,
                 "FrontendPreviewDeployRole",
-                description="Deploy and clean up frontend PR previews from GitHub Actions",
-                # PRs deploy previews; cleanup runs from main when a PR closes.
-                assumed_by=self._github_principal(
-                    [frontend_preview_github_oidc_subject, frontend_github_oidc_subject]
-                ),
+                description="Deploy frontend PR previews from GitHub Actions",
+                assumed_by=self._github_principal(frontend_preview_github_oidc_subject),
             )
             preview_role.add_to_policy(
                 iam.PolicyStatement(
@@ -78,7 +75,7 @@ class GitHubOidcStack(Stack):
             )
             preview_role.add_to_policy(
                 iam.PolicyStatement(
-                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    actions=["s3:PutObject"],
                     resources=[f"{frontend_bucket_arn}/previews/*"],
                 )
             )
@@ -108,9 +105,7 @@ class GitHubOidcStack(Stack):
 
             CfnOutput(self, "CdkDeployRoleArn", value=cdk_deploy_role.role_arn)
 
-    def _github_principal(
-        self, github_oidc_subject: str | list[str]
-    ) -> iam.FederatedPrincipal:
+    def _github_principal(self, github_oidc_subject: str) -> iam.FederatedPrincipal:
         return iam.FederatedPrincipal(
             federated=self.github_provider.attr_arn,
             assume_role_action="sts:AssumeRoleWithWebIdentity",
