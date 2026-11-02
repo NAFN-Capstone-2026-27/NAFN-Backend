@@ -8,9 +8,9 @@ from aws_cdk import (
     aws_apigatewayv2 as apigw,
     aws_apigatewayv2_integrations as integrations,
     aws_dynamodb as dynamodb,
+    aws_ec2 as ec2,
     aws_lambda as lambda_,
     aws_logs as logs,
-    aws_ec2 as ec2,
     aws_rds as rds,
 )
 from constructs import Construct
@@ -119,7 +119,8 @@ class NafnBackendStack(Stack):
 
         # Set up private VPC network, database does not need internet access
         self.vpc = ec2.Vpc(
-            self, "NafnVpc",
+            self,
+            "NafnVpc",
             nat_gateways=0,
             subnet_configuration=[
                 ec2.SubnetConfiguration(
@@ -133,7 +134,8 @@ class NafnBackendStack(Stack):
         # Firewall for the database, starts fully closed. Open port 5432 to
         # Lambdas later with self.database.connections.allow_default_port_from(fn).
         self.db_security_group = ec2.SecurityGroup(
-            self, "NafnDbSecurityGroup",
+            self,
+            "NafnDbSecurityGroup",
             vpc=self.vpc,
             description="NAFN Postgres access",
             allow_all_outbound=False,
@@ -141,7 +143,8 @@ class NafnBackendStack(Stack):
 
         # Postgres database
         self.database = rds.DatabaseInstance(
-            self, "NafnPostgres",
+            self,
+            "NafnPostgres",
             engine=rds.DatabaseInstanceEngine.postgres(
                 version=rds.PostgresEngineVersion.VER_18
             ),
@@ -156,12 +159,11 @@ class NafnBackendStack(Stack):
             # Password is generated and stored in Secrets Manager, never in code.
             credentials=rds.Credentials.from_generated_secret("nafn_admin"),
             database_name="nafn",
-            allocated_storage=20,   #GB, minimum size for POSTGRES
+            allocated_storage=20,  # GB, minimum size for POSTGRES
             max_allocated_storage=50,
             storage_encrypted=True,
             multi_az=False,
             publicly_accessible=False,
-
             # For experimentation, may have to change to true once moved to production
             deletion_protection=False,
             # Take a final snapshot instead of losing data if the DB is removed.
