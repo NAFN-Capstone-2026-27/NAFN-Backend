@@ -19,7 +19,6 @@ LAMBDA_DIR = Path(__file__).parent / "lambda"
 
 
 class NafnBackendStack(Stack):
-
     def __init__(
         self,
         scope: Construct,
@@ -34,7 +33,8 @@ class NafnBackendStack(Stack):
         # One item per partner organization. EIN is unique per org, so it's the
         # partition key; this also lets the API reject duplicate sign-ups.
         self.partners_table = dynamodb.TableV2(
-            self, "NafnPartnersTable",
+            self,
+            "NafnPartnersTable",
             partition_key=dynamodb.Attribute(
                 name="ein", type=dynamodb.AttributeType.STRING
             ),
@@ -47,7 +47,8 @@ class NafnBackendStack(Stack):
         )
 
         self.create_partner_function = lambda_.Function(
-            self, "NafnCreatePartnerFunction",
+            self,
+            "NafnCreatePartnerFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="create_partner.handler",
@@ -56,7 +57,8 @@ class NafnBackendStack(Stack):
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
             log_group=logs.LogGroup(
-                self, "NafnCreatePartnerLogs",
+                self,
+                "NafnCreatePartnerLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),
@@ -65,9 +67,10 @@ class NafnBackendStack(Stack):
         self.partners_table.grant(self.create_partner_function, "dynamodb:PutItem")
 
         self.api = apigw.HttpApi(
-            self, "NafnApi",
+            self,
+            "NafnApi",
             cors_preflight=apigw.CorsPreflightOptions(
-                allow_origins=[f"https://{domain_name}", "https://nafn.us"],
+                allow_origins=["*"],
                 allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
                 allow_headers=["Content-Type"],
             ),
@@ -89,7 +92,8 @@ class NafnBackendStack(Stack):
         )
 
         self.list_partners_function = lambda_.Function(
-            self, "NafnListPartnersFunction",
+            self,
+            "NafnListPartnersFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="list_partners.handler",
@@ -98,7 +102,8 @@ class NafnBackendStack(Stack):
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
             log_group=logs.LogGroup(
-                self, "NafnListPartnersLogs",
+                self,
+                "NafnListPartnersLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),

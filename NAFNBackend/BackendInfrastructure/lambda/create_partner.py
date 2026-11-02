@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 
@@ -24,7 +24,7 @@ def handler(event, context):
     if errors:
         return _response(400, {"errors": errors})
 
-    partner["createdAt"] = datetime.now(timezone.utc).isoformat()
+    partner["createdAt"] = datetime.now(UTC).isoformat()
     try:
         table.put_item(
             Item=partner,
@@ -50,7 +50,11 @@ def validate_partner(body):
     # Required fields. A field that's absent, null, blank or empty counts as
     # missing; this is checked before format so the message says "required"
     # rather than describing a format problem with a value that isn't there.
-    missing = [field for field in ("name", "address", "email", "phone", "ein", "focusAreas") if _is_blank(body.get(field))]
+    missing = [
+        field
+        for field in ("name", "address", "email", "phone", "ein", "focusAreas")
+        if _is_blank(body.get(field))
+    ]
     errors.extend(f"'{field}' is required." for field in missing)
 
     # Ensure name, address, email, and phone # are strings and add them to the partner item

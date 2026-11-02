@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 include = ["NAFNBackend*"]
 exclude = ["node_modules*"]
 
+[tool.setuptools.package-data]
+"NAFNBackend.FrontendInfrastructure" = ["*.js"]
+
 [project]
 name = "NAFN-Backend"
 version = "0.0"
@@ -15,3 +18,17 @@ dependencies = [
    "boto3",
    "constructs"
 ]
+
+[project.optional-dependencies]
+dev = ["ruff==0.17.2"]
+
+[tool.ruff]
+required-version = "==0.17.2"
+line-length = 88
+extend-exclude = ["cdk.out", ".cdk.staging"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
