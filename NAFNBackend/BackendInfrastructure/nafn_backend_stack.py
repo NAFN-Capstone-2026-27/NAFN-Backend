@@ -25,6 +25,8 @@ class NafnBackendStack(Stack):
         scope: Construct,
         construct_id: str,
         domain_name: str,
+        db_instance_class: str,
+        db_instance_size: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -113,7 +115,6 @@ class NafnBackendStack(Stack):
         # Set up private VPC network, database does not need internet access
         self.vpc = ec2.Vpc(
             self, "NafnVpc",
-            max_azs=2,  # RDS needs use of at least 2 AZ's
             nat_gateways=0,
             subnet_configuration=[
                 ec2.SubnetConfiguration(
@@ -137,10 +138,10 @@ class NafnBackendStack(Stack):
         self.database = rds.DatabaseInstance(
             self, "NafnPostgres",
             engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_16
+                version=rds.PostgresEngineVersion.VER_18
             ),
             instance_type=ec2.InstanceType.of(
-                ec2.InstanceClass.T4G, ec2.InstanceSize.MICRO
+                ec2.InstanceClass[db_instance_class], ec2.InstanceSize[db_instance_size]
             ),
             vpc=self.vpc,
             vpc_subnets=ec2.SubnetSelection(
