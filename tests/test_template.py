@@ -1,8 +1,8 @@
-#template script to ensure base URL returns status 200
-
 import os
+
 import requests
 
+#template script to ensure base URL returns status 200
 
 BASE_URL = os.environ.get("BASE_URL", "https://dev.nafn.us").rstrip("/")
 
