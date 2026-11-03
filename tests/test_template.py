@@ -4,7 +4,7 @@ import os
 import requests
 
 
-BASE_URL = os.environ["dev.nafn.us"].rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "https://dev.nafn.us").rstrip("/")
 
 
 def test_application_is_reachable():
