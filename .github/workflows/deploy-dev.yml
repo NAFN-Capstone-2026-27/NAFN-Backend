@@ -87,19 +87,6 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Verify maintainer
-        env:
-          MAINTAINERS: ${{ vars.DEPLOY_MAINTAINERS }}
-          RERUN_ACTOR: ${{ github.triggering_actor }}
-        run: |
-          maintainers="$(printf '%s' "$MAINTAINERS" | tr '[:upper:],' '[:lower:] ' | xargs -n1)"
-          for actor in "$GITHUB_ACTOR" "$RERUN_ACTOR"; do
-            if ! grep -Fxiq -- "$actor" <<< "$maintainers"; then
-              echo "::error::Only designated maintainers can deploy to dev."
-              exit 1
-            fi
-          done
-
       - uses: actions/checkout@v7
         with:
           persist-credentials: false

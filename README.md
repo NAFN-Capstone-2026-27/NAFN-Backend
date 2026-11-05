@@ -125,14 +125,14 @@ managed separately from application deployments.
 | Environment variable | Value |
 | --- | --- |
 | `AWS_ROLE_ARN` | `CdkDeployRoleArn` from the target account's OIDC stack |
-| `DEPLOY_MAINTAINERS` | Space- or comma-separated GitHub logins in dev and prod |
+| `MAINTAINERS` | Space- or comma-separated GitHub logins in prod |
 
 The workflows read the AWS account and region from `cdk.json` and verify the
 authenticated account before deploying.
 
 - **Dev** — **Deploy backend PR to dev** accepts an open same-repo PR number or
-  `main` as a restore source. The maintainer-only workflow deploys the selected
-  revision and smoke-tests the shared API.
+  `main` as a restore source. Users with repository write access can run it to
+  deploy the selected revision and smoke-test the shared API.
 - **Staging** — Pushes to `main` deploy both stacks and run the staging API smoke
   test. A successful run summary includes the run ID for production promotion.
 - **Prod** — **Promote backend to production** is a maintainer-only workflow
