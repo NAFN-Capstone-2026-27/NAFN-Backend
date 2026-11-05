@@ -1,12 +1,8 @@
 name: Deploy backend PR to dev
 
 on:
-  workflow_dispatch:
-    inputs:
-      source:
-        description: Open backend PR number, or main to restore both stacks
-        required: true
-        type: string
+  push:
+    branches: [backend-dev-test]
 
 permissions: {}
 
@@ -16,7 +12,7 @@ concurrency:
 
 jobs:
   synthesize:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/backend-dev-test'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -24,20 +20,24 @@ jobs:
       pull-requests: read
     outputs:
       sha: ${{ steps.source.outputs.sha }}
+      number: ${{ steps.source.outputs.number }}
       artifact-id: ${{ steps.assembly.outputs.artifact-id }}
     steps:
       - name: Resolve candidate
         id: source
         uses: actions/github-script@v8
-        env:
-          SOURCE: ${{ inputs.source }}
         with:
           script: |
-            const source = process.env.SOURCE.trim();
-            if (source === 'main') {
-              core.setOutput('sha', context.sha);
-              return;
+            const { data: matches } = await github.rest.pulls.list({
+              ...context.repo,
+              state: 'open',
+              base: 'main',
+              head: `${context.repo.owner}:bmast/backend-deployment-pipeline`
+            });
+            if (matches.length !== 1) {
+              throw new Error('Expected one open PR from bmast/backend-deployment-pipeline to main.');
             }
+            const source = String(matches[0].number);
             if (!/^[1-9]\d*$/.test(source) || !Number.isSafeInteger(Number(source))) {
               throw new Error('Enter an open backend PR number or main.');
             }
@@ -49,6 +49,7 @@ jobs:
               throw new Error('Select an open same-repository PR targeting main.');
             }
             core.setOutput('sha', pr.head.sha);
+            core.setOutput('number', source);
 
       - uses: actions/checkout@v7
         with:
@@ -124,7 +125,7 @@ jobs:
 
       - name: Record deployed candidate
         env:
-          SOURCE: ${{ inputs.source }}
+          SOURCE: ${{ needs.synthesize.outputs.number }}
           CANDIDATE_SHA: ${{ needs.synthesize.outputs.sha }}
         run: printf 'Deployed `%s` from `%s` to dev. Check the smoke-test result below.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
 
