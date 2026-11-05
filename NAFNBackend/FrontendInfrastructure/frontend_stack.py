@@ -46,16 +46,14 @@ class FrontendStack(Stack):
             self, "Certificate", certificate_arn=cert_arn
         )
 
-        # We wil be using CloudFront origin access control to access the bucket
-        # Therefore, we do not need public access
+        is_prod = environment_name == "prod"
         s3_bucket = aws_s3.Bucket(
             self,
             "S3-Bucket",
             bucket_name=domain_name,
             block_public_access=aws_s3.BlockPublicAccess.BLOCK_ALL,
-            versioned=False,
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
+            removal_policy=RemovalPolicy.RETAIN if is_prod else RemovalPolicy.DESTROY,
+            auto_delete_objects=not is_prod,
         )
 
         if enable_previews:
@@ -71,50 +69,50 @@ class FrontendStack(Stack):
             self, "Frontend-S3-OAC", signing=aws_cloudfront.Signing.SIGV4_ALWAYS
         )
 
-        function_associations = []
         domain_names = (
             [domain_name, f"*.{domain_name}"] if enable_previews else [domain_name]
         )
-        if enable_previews:
-            routing_code = Path(__file__).with_name("frontend_router.js").read_text()
-            routing_code = routing_code.replace(
-                "__ROUTING_CONFIG__",
-                json.dumps(
-                    {
-                        "domainName": domain_name,
-                    }
-                ),
+        routing_code = Path(__file__).with_name("frontend_router.js").read_text()
+        routing_code = routing_code.replace(
+            "__ROUTING_CONFIG__",
+            json.dumps({"domainName": domain_name, "enablePreviews": enable_previews}),
+        )
+        frontend_router = aws_cloudfront.Function(
+            self,
+            "FrontendRouter",
+            code=aws_cloudfront.FunctionCode.from_inline(routing_code),
+            runtime=aws_cloudfront.FunctionRuntime.JS_2_0,
+            comment="Rewrite SPA routes and route PR preview subdomains",
+        )
+        function_associations = [
+            aws_cloudfront.FunctionAssociation(
+                function=frontend_router,
+                event_type=aws_cloudfront.FunctionEventType.VIEWER_REQUEST,
             )
-            frontend_router = aws_cloudfront.Function(
-                self,
-                "FrontendRouter",
-                code=aws_cloudfront.FunctionCode.from_inline(routing_code),
-                runtime=aws_cloudfront.FunctionRuntime.JS_2_0,
-                comment="Rewrite SPA routes and route PR preview subdomains",
-            )
-
-            function_associations.append(
-                aws_cloudfront.FunctionAssociation(
-                    function=frontend_router,
-                    event_type=aws_cloudfront.FunctionEventType.VIEWER_REQUEST,
-                )
+        ]
+        origin = aws_cloudfront_origins.S3BucketOrigin.with_origin_access_control(
+            s3_bucket,
+            origin_access_control=s3_oac,
+        )
+        asset_behaviors = {}
+        if environment_name != "dev":
+            asset_behaviors["/assets/*"] = aws_cloudfront.BehaviorOptions(
+                origin=origin,
+                viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                cache_policy=aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                function_associations=function_associations,
             )
 
         distribution = aws_cloudfront.Distribution(
             self,
             "CF-Distribution",
             default_behavior=aws_cloudfront.BehaviorOptions(
-                origin=aws_cloudfront_origins.S3BucketOrigin.with_origin_access_control(
-                    s3_bucket,
-                    origin_access_control=s3_oac,
-                ),
+                origin=origin,
                 viewer_protocol_policy=aws_cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                # If the environment is dev, disable caching. Otherwise use caching.
-                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED
-                if environment_name == "dev"
-                else aws_cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                cache_policy=aws_cloudfront.CachePolicy.CACHING_DISABLED,
                 function_associations=function_associations,
             ),
+            additional_behaviors=asset_behaviors,
             domain_names=domain_names,
             certificate=cert,
             default_root_object="index.html",

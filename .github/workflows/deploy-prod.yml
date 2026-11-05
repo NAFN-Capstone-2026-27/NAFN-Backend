@@ -1,0 +1,105 @@
+name: Promote backend to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_run_id:
+        description: Successful backend staging workflow run ID
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: prod
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify maintainer and staging run
+        id: candidate
+        uses: actions/github-script@v8
+        env:
+          MAINTAINERS: ${{ vars.DEPLOY_MAINTAINERS }}
+          RERUN_ACTOR: ${{ github.triggering_actor }}
+          RUN_ID: ${{ inputs.staging_run_id }}
+        with:
+          script: |
+            const maintainers = process.env.MAINTAINERS.toLowerCase().split(/[\s,]+/);
+            if (![context.actor, process.env.RERUN_ACTOR].every(
+              actor => actor && maintainers.includes(actor.toLowerCase())
+            )) throw new Error('Only designated maintainers can promote to production.');
+
+            const runId = process.env.RUN_ID.trim();
+            if (!/^[1-9]\d*$/.test(runId) || !Number.isSafeInteger(Number(runId))) {
+              throw new Error('Enter a numeric staging run ID.');
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: Number(runId)
+            });
+            if (run.path.split('@')[0] !== '.github/workflows/deploy-staging.yml' ||
+                run.head_branch !== 'main' || run.conclusion !== 'success' ||
+                !['push', 'workflow_dispatch'].includes(run.event) ||
+                run.head_repository?.id !== context.payload.repository.id) {
+              throw new Error('Select a successful backend staging run from main.');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              ...context.repo, run_id: run.id
+            });
+            const staged = jobs.some(job => job.name === 'deploy-staging' &&
+              job.conclusion === 'success' && job.steps.some(step =>
+                step.name === 'Smoke-test staging API' && step.conclusion === 'success'));
+            if (!staged) throw new Error('The selected run has no successful staging smoke test.');
+            core.setOutput('sha', run.head_sha);
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.candidate.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+
+      - name: Synthesize the staged revision for production
+        id: target
+        run: |
+          jq -er '.context.environments.prod |
+            select((.account | test("^[0-9]{12}$")) and (.region | length > 0)) |
+            "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
+          cdk synth NAFN-Backend NAFN-Frontend --exclusively -c env=prod --output cdk.out
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.target.outputs.region }}
+          allowed-account-ids: ${{ steps.target.outputs.account }}
+
+      - name: Show production diff
+        run: cdk diff --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --method template
+
+      - name: Deploy both production stacks
+        run: cdk deploy --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --require-approval never
+
+      - name: Check production API without writing data
+        run: |
+          api_url="$(aws cloudformation describe-stacks --stack-name NAFN-Backend \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" --output text)"
+          [[ "$api_url" == https://* ]]
+          curl --fail --silent --show-error --retry 3 --max-time 30 "${api_url%/}/partners" \
+            | jq -e '.partners | type == "array"' > /dev/null
+
+      - name: Record production revision
+        env:
+          RELEASE_SHA: ${{ steps.candidate.outputs.sha }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        run: printf 'Released `%s` from staging run `%s`.\n' "$RELEASE_SHA" "$STAGING_RUN_ID" >> "$GITHUB_STEP_SUMMARY"

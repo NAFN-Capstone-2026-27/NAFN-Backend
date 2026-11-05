@@ -1,0 +1,145 @@
+name: Deploy backend PR to dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Open backend PR number, or main to restore both stacks
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  synthesize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      artifact-id: ${{ steps.assembly.outputs.artifact-id }}
+    steps:
+      - name: Resolve candidate
+        id: source
+        uses: actions/github-script@v8
+        env:
+          SOURCE: ${{ inputs.source }}
+        with:
+          script: |
+            const source = process.env.SOURCE.trim();
+            if (source === 'main') {
+              core.setOutput('sha', context.sha);
+              return;
+            }
+            if (!/^[1-9]\d*$/.test(source) || !Number.isSafeInteger(Number(source))) {
+              throw new Error('Enter an open backend PR number or main.');
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: Number(source)
+            });
+            if (pr.state !== 'open' || pr.base.ref !== 'main' ||
+                pr.head.repo?.id !== context.payload.repository.id) {
+              throw new Error('Select an open same-repository PR targeting main.');
+            }
+            core.setOutput('sha', pr.head.sha);
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+        with:
+          project-directory: ./candidate
+
+      - name: Synthesize candidate
+        working-directory: candidate
+        run: cdk synth NAFN-Backend NAFN-Frontend --exclusively -c env=dev --output ../cdk.out
+
+      - name: Save assembly
+        id: assembly
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-assembly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cdk.out/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: synthesize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify maintainer
+        env:
+          MAINTAINERS: ${{ vars.DEPLOY_MAINTAINERS }}
+          RERUN_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          maintainers="$(printf '%s' "$MAINTAINERS" | tr '[:upper:],' '[:lower:] ' | xargs -n1)"
+          for actor in "$GITHUB_ACTOR" "$RERUN_ACTOR"; do
+            if ! grep -Fxiq -- "$actor" <<< "$maintainers"; then
+              echo "::error::Only designated maintainers can deploy to dev."
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.synthesize.outputs.artifact-id }}
+          path: cdk.out/
+
+      - name: Verify dev assembly
+        id: target
+        run: |
+          account="$(jq -er '.context.environments.dev.account | select(test("^[0-9]{12}$"))' cdk.json)"
+          region="$(jq -er '.context.environments.dev.region | select(length > 0)' cdk.json)"
+          jq -e --arg target "aws://$account/$region" '
+            [.artifacts | to_entries[] | select(.value.type == "aws:cloudformation:stack")
+              | select(.key == "NAFN-Backend" or .key == "NAFN-Frontend")
+              | select(.value.environment == $target and
+                  (.value.properties.stackName // .key) == .key)] | length == 2
+          ' cdk.out/manifest.json > /dev/null
+          printf 'account=%s\nregion=%s\n' "$account" "$region" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.target.outputs.region }}
+          allowed-account-ids: ${{ steps.target.outputs.account }}
+
+      - name: Deploy both dev stacks
+        run: cdk deploy --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --require-approval never
+
+      - name: Record deployed candidate
+        env:
+          SOURCE: ${{ inputs.source }}
+          CANDIDATE_SHA: ${{ needs.synthesize.outputs.sha }}
+        run: printf 'Deployed `%s` from `%s` to dev. Check the smoke-test result below.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke-test dev API
+        run: python post_deployment_tests.py --env dev

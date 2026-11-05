@@ -24,30 +24,31 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          persist-credentials: false
 
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: '26'
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
 
-      - name: Install dependencies
+      - name: Read staging target from CDK
+        id: target
         run: |
-          pip install .
-          npm install -g aws-cdk
+          jq -er '.context.environments.staging |
+            select((.account | test("^[0-9]{12}$")) and (.region | length > 0)) |
+            "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
+          aws-region: ${{ steps.target.outputs.region }}
+          allowed-account-ids: ${{ steps.target.outputs.account }}
 
       - name: Deploy stacks
-        run: cdk deploy --all -c env=staging --require-approval never
+        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=staging --require-approval never
+
+      - name: Smoke-test staging API
+        run: python post_deployment_tests.py --env staging
+
+      - name: Record staged revision
+        run: printf 'Staging passed for `%s`. Use run ID `%s` to promote it.\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"

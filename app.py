@@ -32,6 +32,7 @@ hosted_zone_id = config["hosted_zone_id"]
 hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
 project_name = config["project_name"]
+backend_stack_name = f"{project_name}-Backend"
 enable_previews = config.get("enable_previews", False)
 frontend_preview_github_oidc_subject = config.get(
     "frontend_preview_github_oidc_subject"
@@ -56,7 +57,7 @@ FrontendStack(
 
 NafnBackendStack(
     app,
-    f"{project_name}-Backend",
+    backend_stack_name,
     domain_name,
     env=env,
 )
@@ -65,8 +66,10 @@ GitHubOidcStack(
     app,
     f"{project_name}-GitHubOidc",
     env,
+    environment_name=environment_name,
+    backend_stack_name=backend_stack_name,
     frontend_bucket_name=domain_name,
-    frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
+    frontend_github_oidc_subject=config.get("frontend_github_oidc_subject"),
     frontend_preview_github_oidc_subject=frontend_preview_github_oidc_subject,
     cdk_deploy_github_oidc_subject=config.get("cdk_deploy_github_oidc_subject"),
 )

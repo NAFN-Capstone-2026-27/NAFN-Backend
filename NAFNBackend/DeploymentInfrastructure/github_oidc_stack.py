@@ -1,6 +1,7 @@
 from aws_cdk import (
     CfnOutput,
     Environment,
+    RemovalPolicy,
     Stack,
     aws_iam as iam,
 )
@@ -19,8 +20,10 @@ class GitHubOidcStack(Stack):
         construct_id: str,
         env: Environment,
         *,
+        environment_name: str,
+        backend_stack_name: str,
         frontend_bucket_name: str,
-        frontend_github_oidc_subject: str,
+        frontend_github_oidc_subject: str | None = None,
         frontend_preview_github_oidc_subject: str | None = None,
         cdk_deploy_github_oidc_subject: str | None = None,
     ) -> None:
@@ -34,29 +37,33 @@ class GitHubOidcStack(Stack):
             url="https://token.actions.githubusercontent.com",
             client_id_list=["sts.amazonaws.com"],
         )
+        self.github_provider.apply_removal_policy(RemovalPolicy.RETAIN)
 
-        frontend_deploy_role = iam.Role(
-            self,
-            "FrontendDeployRole",
-            description="Deploy the NAFN frontend from GitHub Actions",
-            assumed_by=self._github_principal(frontend_github_oidc_subject),
-        )
         # The bucket is named after the domain, so its ARN is known without
         # referencing FrontendStack.
         frontend_bucket_arn = f"arn:aws:s3:::{frontend_bucket_name}"
-        frontend_deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:ListBucket"],
-                resources=[frontend_bucket_arn],
+        if frontend_github_oidc_subject:
+            frontend_deploy_role = iam.Role(
+                self,
+                "FrontendDeployRole",
+                description="Deploy the NAFN frontend from GitHub Actions",
+                assumed_by=self._github_principal(frontend_github_oidc_subject),
             )
-        )
-        frontend_deploy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["s3:PutObject", "s3:DeleteObject"],
-                resources=[f"{frontend_bucket_arn}/*"],
+            frontend_deploy_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:ListBucket"],
+                    resources=[frontend_bucket_arn],
+                )
             )
-        )
-        CfnOutput(self, "FrontendDeployRoleArn", value=frontend_deploy_role.role_arn)
+            frontend_deploy_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["s3:PutObject", "s3:DeleteObject"],
+                    resources=[f"{frontend_bucket_arn}/*"],
+                )
+            )
+            CfnOutput(
+                self, "FrontendDeployRoleArn", value=frontend_deploy_role.role_arn
+            )
 
         # Only environments with frontend PR previews get the preview role.
         if frontend_preview_github_oidc_subject:
@@ -81,27 +88,49 @@ class GitHubOidcStack(Stack):
             )
             CfnOutput(self, "FrontendPreviewDeployRoleArn", value=preview_role.role_arn)
 
-        # Only environments deployed from this repository's GitHub Actions
-        # workflow get a role that can deploy the CDK app.
         if cdk_deploy_github_oidc_subject:
             cdk_deploy_role = iam.Role(
                 self,
                 "CdkDeployRole",
-                description="Deploy every stack in the NAFN CDK app from GitHub Actions",
+                description=f"Deploy NAFN {environment_name} from GitHub Actions",
                 assumed_by=self._github_principal(cdk_deploy_github_oidc_subject),
             )
 
-            # `cdk deploy` does the actual work for every stack through the roles
-            # `cdk bootstrap` created, so assuming them is enough to run
-            # `cdk deploy --all`, including updates to this stack.
             cdk_deploy_role.add_to_policy(
                 iam.PolicyStatement(
                     actions=["sts:AssumeRole"],
                     resources=[
-                        f"arn:aws:iam::{self.account}:role/cdk-{CDK_BOOTSTRAP_QUALIFIER}-*-{self.account}-{self.region}"
+                        f"arn:{self.partition}:iam::{self.account}:role/"
+                        f"cdk-{CDK_BOOTSTRAP_QUALIFIER}-{purpose}-role-"
+                        f"{self.account}-{self.region}"
+                        for purpose in ("deploy", "file-publishing", "lookup")
                     ],
                 )
             )
+
+            stack_arn_prefix = f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/"
+            cdk_deploy_role.add_to_policy(
+                iam.PolicyStatement(
+                    actions=["cloudformation:DescribeStacks"],
+                    resources=[f"{stack_arn_prefix}{backend_stack_name}/*"],
+                )
+            )
+            if environment_name in {"dev", "staging"}:
+                # CloudFormation generates the table name from the stack name
+                # and logical ID. Cleanup is limited to synthetic EINs.
+                cdk_deploy_role.add_to_policy(
+                    iam.PolicyStatement(
+                        actions=["dynamodb:DeleteItem"],
+                        resources=[
+                            f"arn:{self.partition}:dynamodb:{self.region}:"
+                            f"{self.account}:table/{backend_stack_name}-NafnPartnersTable*"
+                        ],
+                        conditions={
+                            "ForAllValues:StringLike": {"dynamodb:LeadingKeys": "00*"},
+                            "Null": {"dynamodb:LeadingKeys": "false"},
+                        },
+                    )
+                )
 
             CfnOutput(self, "CdkDeployRoleArn", value=cdk_deploy_role.role_arn)
 

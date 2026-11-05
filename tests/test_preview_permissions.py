@@ -35,11 +35,14 @@ class PreviewPermissionsTests(unittest.TestCase):
             app,
             "PermissionsTest",
             env,
+            environment_name="dev",
+            backend_stack_name="NAFN-Backend",
             frontend_bucket_name=config["domain_name"],
-            frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
+            frontend_github_oidc_subject=config.get("frontend_github_oidc_subject"),
             frontend_preview_github_oidc_subject=config[
                 "frontend_preview_github_oidc_subject"
             ],
+            cdk_deploy_github_oidc_subject=config["cdk_deploy_github_oidc_subject"],
         )
         cls.resources = Template.from_stack(frontend_stack).to_json()["Resources"]
         cls.oidc_template = Template.from_stack(oidc_stack).to_json()
@@ -88,7 +91,7 @@ class PreviewPermissionsTests(unittest.TestCase):
         self.assertEqual(objects["Resource"], self.preview_objects())
         self.assertEqual(objects["Action"], "s3:PutObject")
 
-    def test_preview_role_trusts_only_exact_pr_subject(self):
+    def test_preview_role_trusts_only_exact_dev_environment_subject(self):
         provider_ids = [
             k
             for k, v in self.oidc_resources.items()
@@ -120,7 +123,7 @@ class PreviewPermissionsTests(unittest.TestCase):
         )
         self.assertTrue(
             self.config["frontend_preview_github_oidc_subject"].endswith(
-                ":pull_request"
+                ":environment:dev"
             )
         )
 
@@ -194,6 +197,10 @@ class PreviewPermissionsTests(unittest.TestCase):
             {"Fn::GetAtt": [role_id, "Arn"]},
         )
         self.assertNotIn("FrontendPreviewCleanupRoleArn", self.oidc_template["Outputs"])
+        self.assertNotIn("FrontendDeployRoleArn", self.oidc_template["Outputs"])
+        self.assertNotIn(
+            "PermissionsTest/FrontendDeployRole/Resource", self.resource_ids
+        )
         self.assertNotIn(
             "PermissionsTest/FrontendPreviewCleanupRole/Resource", self.resource_ids
         )
@@ -229,30 +236,45 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     app,
                     f"{name}OidcTest",
                     env,
+                    environment_name=name,
+                    backend_stack_name="NAFN-Backend",
                     frontend_bucket_name=config["domain_name"],
                     frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
                     frontend_preview_github_oidc_subject=config.get(
                         "frontend_preview_github_oidc_subject"
                     ),
+                    cdk_deploy_github_oidc_subject=config[
+                        "cdk_deploy_github_oidc_subject"
+                    ],
                 )
                 template = Template.from_stack(stack).to_json()
                 resources = list(template["Resources"].values())
                 oidc_template = Template.from_stack(oidc_stack).to_json()
-                bucket = next(
-                    r["Properties"] for r in resources if r["Type"] == "AWS::S3::Bucket"
+                bucket = next(r for r in resources if r["Type"] == "AWS::S3::Bucket")
+                self.assertNotIn("LifecycleConfiguration", bucket["Properties"])
+                self.assertEqual(
+                    bucket["DeletionPolicy"], "Retain" if name == "prod" else "Delete"
                 )
-                self.assertNotIn("LifecycleConfiguration", bucket)
-                self.assertFalse(
-                    any(r["Type"] == "AWS::CloudFront::Function" for r in resources)
-                )
+                self.assertNotIn("VersioningConfiguration", bucket["Properties"])
                 distribution = next(
                     r["Properties"]["DistributionConfig"]
                     for r in resources
                     if r["Type"] == "AWS::CloudFront::Distribution"
                 )
                 self.assertEqual(distribution["Aliases"], [config["domain_name"]])
-                self.assertFalse(
-                    distribution["DefaultCacheBehavior"].get("FunctionAssociations")
+                self.assertEqual(
+                    len(distribution["DefaultCacheBehavior"]["FunctionAssociations"]), 1
+                )
+                self.assertEqual(
+                    distribution["DefaultCacheBehavior"]["CachePolicyId"],
+                    "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+                )
+                self.assertEqual(
+                    distribution["CacheBehaviors"][0]["PathPattern"], "/assets/*"
+                )
+                self.assertEqual(
+                    distribution["CacheBehaviors"][0]["CachePolicyId"],
+                    "658327ea-f89d-4fab-a63d-7e88639e58f6",
                 )
                 records = [
                     r["Properties"]["Name"]
@@ -282,6 +304,17 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     any("Preview" in key for key in oidc_template["Outputs"])
                 )
                 self.assertIn("FrontendDeployRoleArn", oidc_template["Outputs"])
+                self.assertIn("CdkDeployRoleArn", oidc_template["Outputs"])
+                self.assertTrue(
+                    all(
+                        role["AssumeRolePolicyDocument"]["Statement"][0]["Condition"][
+                            "StringEquals"
+                        ]["token.actions.githubusercontent.com:sub"].endswith(
+                            f":environment:{name}"
+                        )
+                        for role in roles
+                    )
+                )
 
 
 if __name__ == "__main__":
