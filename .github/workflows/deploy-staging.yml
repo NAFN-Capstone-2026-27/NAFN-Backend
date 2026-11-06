@@ -1,0 +1,53 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [backend-staging-test-v2]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/backend-staging-test-v2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The deploy role only trusts tokens issued for this environment.
+    environment: staging
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+
+      - name: Read staging target from CDK
+        id: target
+        run: |
+          jq -er '.context.environments.staging |
+            select((.account | length > 0) and (.region | length > 0)) |
+            "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.target.outputs.region }}
+          allowed-account-ids: ${{ steps.target.outputs.account }}
+
+      - name: Deploy stacks
+        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=staging --require-approval never
+
+      # TODO Add an API smoke test when the PostgreSQL-backed API is ready.
+
+      - name: Record staged revision
+        run: printf 'Staging deployed `%s`. Use run ID `%s` to promote it.\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
