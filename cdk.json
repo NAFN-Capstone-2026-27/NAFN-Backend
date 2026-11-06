@@ -20,13 +20,15 @@
         "certificate_arn": "arn:aws:acm:us-east-1:463735866782:certificate/e529de83-219d-4321-b4a5-c77e86e8e1e3",
         "hosted_zone_id": "Z07072232L5K5IBP7GCJQ",
         "hosted_zone_name": "dev.nafn.us",
-        "project_name": "NAFN", 
+        "project_name": "NAFN",
         "domain_name": "dev.nafn.us",
         "enable_previews": true,
         "account": "463735866782",
         "region": "us-east-1",
         "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
-        "github_preview_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:pull_request"
+        "github_preview_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:pull_request",
+        "db_instance_class": "T4G",
+        "db_instance_size": "MICRO"
       },
       "prod": {
         "certificate_arn": "arn:aws:acm:us-east-1:892077328991:certificate/e10f34a3-a761-4480-baf3-bb8e5763aa99",
@@ -36,7 +38,9 @@
         "domain_name": "nafn.us",
         "account": "892077328991",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
+        "db_instance_class": "T4G",
+        "db_instance_size": "MICRO"
       },
       "staging": {
         "certificate_arn": "arn:aws:acm:us-east-1:689508754428:certificate/d0495d3a-437a-42d8-a9a4-6de79713a117",
@@ -46,7 +50,9 @@
         "domain_name": "staging.nafn.us",
         "account": "689508754428",
         "region": "us-east-1",
-        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main"
+        "github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:ref:refs/heads/main",
+        "db_instance_class": "T4G",
+        "db_instance_size": "MICRO"
       }
     }
   }
