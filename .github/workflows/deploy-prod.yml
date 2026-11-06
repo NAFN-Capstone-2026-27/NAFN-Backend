@@ -69,13 +69,12 @@ jobs:
       - name: Set up CDK
         uses: ./.github/actions/setup-cdk
 
-      - name: Synthesize the staged revision for production
+      - name: Read production target from CDK
         id: target
         run: |
           jq -er '.context.environments.prod |
             select((.account | test("^[0-9]{12}$")) and (.region | length > 0)) |
             "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
-          cdk synth NAFN-Backend NAFN-Frontend --exclusively -c env=prod --output cdk.out
 
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v6.3.0
@@ -85,10 +84,10 @@ jobs:
           allowed-account-ids: ${{ steps.target.outputs.account }}
 
       - name: Show production diff
-        run: cdk diff --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --method template
+        run: cdk diff NAFN-Backend NAFN-Frontend --exclusively -c env=prod --method template
 
       - name: Deploy both production stacks
-        run: cdk deploy --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --require-approval never
+        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=prod --require-approval never
 
       - name: Check production API without writing data
         run: |

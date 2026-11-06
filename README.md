@@ -131,13 +131,14 @@ The workflows read the AWS account and region from `cdk.json` and verify the
 authenticated account before deploying.
 
 - **Dev** — **Deploy backend PR to dev** accepts an open same-repo PR number or
-  `main` as a restore source. Users with repository write access can run it to
-  deploy the selected revision and smoke-test the shared API.
+  `main` as a restore source. Users with repository write access can run it.
+  The workflow authenticates to dev before CDK synthesizes and deploys the
+  selected revision, then smoke-tests the shared API.
 - **Staging** — Pushes to `main` deploy both stacks and run the staging API smoke
   test. A successful run summary includes the run ID for production promotion.
 - **Prod** — **Promote backend to production** is a maintainer-only workflow
-  that accepts a successful staging run ID. It synthesizes that revision for
-  prod, logs a CDK diff, deploys both stacks, and runs a read-only API check.
+  that accepts a successful staging run ID. It authenticates to prod, logs a
+  CDK diff for that revision, deploys both stacks, and runs a read-only API check.
 
 ## Backend smoke tests
 

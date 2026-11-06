@@ -15,16 +15,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  synthesize:
+  deploy:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
+    environment: dev
     permissions:
       contents: read
       pull-requests: read
-    outputs:
-      sha: ${{ steps.source.outputs.sha }}
-      artifact-id: ${{ steps.assembly.outputs.artifact-id }}
+      id-token: write
     steps:
       - name: Resolve candidate
         id: source
@@ -60,57 +59,20 @@ jobs:
           path: candidate
           persist-credentials: false
 
-      - name: Set up CDK
-        uses: ./.github/actions/setup-cdk
-        with:
-          project-directory: ./candidate
-
-      - name: Synthesize candidate
-        working-directory: candidate
-        run: cdk synth NAFN-Backend NAFN-Frontend --exclusively -c env=dev --output ../cdk.out
-
-      - name: Save assembly
-        id: assembly
-        uses: actions/upload-artifact@v7
-        with:
-          name: dev-assembly-${{ github.run_id }}-${{ github.run_attempt }}
-          path: cdk.out/
-          if-no-files-found: error
-          retention-days: 7
-
-  deploy:
-    needs: synthesize
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment: dev
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Set up CDK
-        uses: ./.github/actions/setup-cdk
-
-      - uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ needs.synthesize.outputs.artifact-id }}
-          path: cdk.out/
-
-      - name: Verify dev assembly
+      - name: Verify dev target
         id: target
         run: |
           account="$(jq -er '.context.environments.dev.account | select(test("^[0-9]{12}$"))' cdk.json)"
           region="$(jq -er '.context.environments.dev.region | select(length > 0)' cdk.json)"
-          jq -e --arg target "aws://$account/$region" '
-            [.artifacts | to_entries[] | select(.value.type == "aws:cloudformation:stack")
-              | select(.key == "NAFN-Backend" or .key == "NAFN-Frontend")
-              | select(.value.environment == $target and
-                  (.value.properties.stackName // .key) == .key)] | length == 2
-          ' cdk.out/manifest.json > /dev/null
+          jq -e --arg account "$account" --arg region "$region" '
+            .context.environments.dev | .account == $account and .region == $region
+          ' candidate/cdk.json > /dev/null
           printf 'account=%s\nregion=%s\n' "$account" "$region" >> "$GITHUB_OUTPUT"
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+        with:
+          project-directory: ./candidate
 
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v6.3.0
@@ -120,12 +82,13 @@ jobs:
           allowed-account-ids: ${{ steps.target.outputs.account }}
 
       - name: Deploy both dev stacks
-        run: cdk deploy --app cdk.out NAFN-Backend NAFN-Frontend --exclusively --require-approval never
+        working-directory: candidate
+        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=dev --require-approval never
 
       - name: Record deployed candidate
         env:
           SOURCE: ${{ inputs.source }}
-          CANDIDATE_SHA: ${{ needs.synthesize.outputs.sha }}
+          CANDIDATE_SHA: ${{ steps.source.outputs.sha }}
         run: printf 'Deployed `%s` from `%s` to dev. Check the smoke-test result below.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke-test dev API
