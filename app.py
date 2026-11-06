@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import aws_cdk
 from aws_cdk import App, Environment
 
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
@@ -20,8 +19,6 @@ if environment_name not in environments:
     raise ValueError(f"Unknown environment: {environment_name}")
 
 config = environments[environment_name]
-
-env = aws_cdk.Environment(account=config["account"], region=config["region"])
 
 # Intentionally errors if doesn't exist
 account = config["account"]
