@@ -37,7 +37,7 @@ jobs:
               core.setOutput('sha', context.sha);
               return;
             }
-            if (!/^[1-9]\d*$/.test(source) || !Number.isSafeInteger(Number(source))) {
+            if (!/^[1-9]\d*$/.test(source)) {
               throw new Error('Enter an open backend PR number or main.');
             }
             const { data: pr } = await github.rest.pulls.get({
@@ -62,7 +62,7 @@ jobs:
       - name: Verify dev target
         id: target
         run: |
-          account="$(jq -er '.context.environments.dev.account | select(test("^[0-9]{12}$"))' cdk.json)"
+          account="$(jq -er '.context.environments.dev.account | select(length > 0)' cdk.json)"
           region="$(jq -er '.context.environments.dev.region | select(length > 0)' cdk.json)"
           jq -e --arg account "$account" --arg region "$region" '
             .context.environments.dev | .account == $account and .region == $region

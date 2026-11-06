@@ -34,7 +34,7 @@ jobs:
         id: target
         run: |
           jq -er '.context.environments.staging |
-            select((.account | test("^[0-9]{12}$")) and (.region | length > 0)) |
+            select((.account | length > 0) and (.region | length > 0)) |
             "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to AWS

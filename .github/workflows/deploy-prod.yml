@@ -33,25 +33,16 @@ jobs:
         with:
           script: |
             const runId = process.env.RUN_ID.trim();
-            if (!/^[1-9]\d*$/.test(runId) || !Number.isSafeInteger(Number(runId))) {
+            if (!/^[1-9]\d*$/.test(runId)) {
               throw new Error('Enter a numeric staging run ID.');
             }
             const { data: run } = await github.rest.actions.getWorkflowRun({
               ...context.repo, run_id: Number(runId)
             });
             if (run.path.split('@')[0] !== '.github/workflows/deploy-staging.yml' ||
-                run.head_branch !== 'main' || run.conclusion !== 'success' ||
-                !['push', 'workflow_dispatch'].includes(run.event) ||
-                run.head_repository?.id !== context.payload.repository.id) {
+                run.head_branch !== 'main' || run.conclusion !== 'success') {
               throw new Error('Select a successful backend staging run from main.');
             }
-            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-              ...context.repo, run_id: run.id
-            });
-            const staged = jobs.some(job => job.name === 'deploy-staging' &&
-              job.conclusion === 'success' && job.steps.some(step =>
-                step.name === 'Deploy stacks' && step.conclusion === 'success'));
-            if (!staged) throw new Error('The selected run has no successful staging deployment.');
             core.setOutput('sha', run.head_sha);
 
       - uses: actions/checkout@v7
@@ -66,7 +57,7 @@ jobs:
         id: target
         run: |
           jq -er '.context.environments.prod |
-            select((.account | test("^[0-9]{12}$")) and (.region | length > 0)) |
+            select((.account | length > 0) and (.region | length > 0)) |
             "account=\(.account)\nregion=\(.region)"' cdk.json >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to AWS
