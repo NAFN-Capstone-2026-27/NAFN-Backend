@@ -1,12 +1,8 @@
 name: Deploy backend PR to dev
 
 on:
-  workflow_dispatch:
-    inputs:
-      source:
-        description: Open backend PR number, or main to restore both stacks
-        required: true
-        type: string
+  push:
+    branches: [backend-dev-test-v2]
 
 permissions: {}
 
@@ -16,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/backend-dev-test-v2'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: dev
@@ -29,7 +25,7 @@ jobs:
         id: source
         uses: actions/github-script@v8
         env:
-          SOURCE: ${{ inputs.source }}
+          SOURCE: '17'
         with:
           script: |
             const source = process.env.SOURCE.trim();
@@ -89,6 +85,6 @@ jobs:
 
       - name: Record deployed candidate
         env:
-          SOURCE: ${{ inputs.source }}
+          SOURCE: '17'
           CANDIDATE_SHA: ${{ steps.source.outputs.sha }}
         run: printf 'Deployed `%s` from `%s` to dev.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
