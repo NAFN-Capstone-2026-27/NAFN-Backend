@@ -59,6 +59,8 @@ NafnBackendStack(
     app,
     backend_stack_name,
     domain_name,
+    db_instance_class=config["db_instance_class"],
+    db_instance_size=config["db_instance_size"],
     env=env,
 )
 
