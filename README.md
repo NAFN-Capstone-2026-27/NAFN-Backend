@@ -125,7 +125,6 @@ managed separately from application deployments.
 | Environment variable | Value |
 | --- | --- |
 | `AWS_ROLE_ARN` | `CdkDeployRoleArn` from the target account's OIDC stack |
-| `MAINTAINERS` | Space- or comma-separated GitHub logins in prod |
 
 The workflows read the AWS account and region from `cdk.json` and verify the
 authenticated account before deploying.
@@ -136,8 +135,8 @@ authenticated account before deploying.
   selected revision.
 - **Staging** — Pushes to `main` deploy both stacks. A successful run summary
   includes the run ID for production promotion.
-- **Prod** — **Promote backend to production** is a maintainer-only workflow
-  that accepts a successful staging run ID. It authenticates to prod, logs a
+- **Prod** — Anyone with repository write access can run **Promote backend to
+  production** with a successful staging run ID. It authenticates to prod, logs a
   CDK diff for that revision and deploys both stacks.
 
 ## Manual backend smoke tests

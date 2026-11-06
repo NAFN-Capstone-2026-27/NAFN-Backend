@@ -25,20 +25,13 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Verify maintainer and staging run
+      - name: Verify staging run
         id: candidate
         uses: actions/github-script@v8
         env:
-          MAINTAINERS: ${{ vars.MAINTAINERS }}
-          RERUN_ACTOR: ${{ github.triggering_actor }}
           RUN_ID: ${{ inputs.staging_run_id }}
         with:
           script: |
-            const maintainers = process.env.MAINTAINERS.toLowerCase().split(/[\s,]+/);
-            if (![context.actor, process.env.RERUN_ACTOR].every(
-              actor => actor && maintainers.includes(actor.toLowerCase())
-            )) throw new Error('Only designated maintainers can promote to production.');
-
             const runId = process.env.RUN_ID.trim();
             if (!/^[1-9]\d*$/.test(runId) || !Number.isSafeInteger(Number(runId))) {
               throw new Error('Enter a numeric staging run ID.');
