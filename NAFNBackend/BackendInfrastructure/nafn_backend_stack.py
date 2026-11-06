@@ -23,7 +23,6 @@ class NafnBackendStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
-        domain_name: str,
         db_instance_class: str,
         db_instance_size: str,
         **kwargs,

@@ -6,11 +6,17 @@ const test = require('node:test');
 
 const source = readFileSync(join(
     __dirname, '../NAFNBackend/FrontendInfrastructure/frontend_router.js'
-), 'utf8').replace('__ROUTING_CONFIG__', JSON.stringify({
-    domainName: 'dev.nafn.us'
-}));
-const context = {};
-runInNewContext(source, context);
+), 'utf8');
+
+function loadRouter(domainName, enablePreviews) {
+    const context = {};
+    runInNewContext(source.replace('__ROUTING_CONFIG__', JSON.stringify({
+        domainName, enablePreviews
+    })), context);
+    return context.handler;
+}
+
+const context = { handler: loadRouter('dev.nafn.us', true) };
 
 function event(host, uri) {
     return {
@@ -33,9 +39,18 @@ test('preview page routes use that PR index, including nested routes and refresh
 
 test('assets and files keep their paths, including missing and extensionless assets', () => {
     for (const uri of ['/assets/app.js', '/assets/app.css', '/assets/missing',
-        '/assets/logo.png', '/favicon.ico', '/index.html']) {
+        '/assets/logo.png', '/favicon.ico', '/index.html', '/runtime-config.json']) {
         assert.equal(context.handler(event('pr-12.dev.nafn.us', uri)).uri,
             '/previews/pr-12' + uri);
+    }
+});
+
+test('staging and prod serve deep links and runtime config without preview routing', () => {
+    for (const host of ['staging.nafn.us', 'nafn.us']) {
+        const handler = loadRouter(host, false);
+        assert.equal(handler(event(host, '/about')).uri, '/index.html');
+        assert.equal(handler(event(host, '/runtime-config.json')).uri, '/runtime-config.json');
+        assert.equal(handler(event('pr-12.' + host, '/')).statusCode, 404);
     }
 });
 
