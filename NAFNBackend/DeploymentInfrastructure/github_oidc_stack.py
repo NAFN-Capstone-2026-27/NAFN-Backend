@@ -21,7 +21,6 @@ class GitHubOidcStack(Stack):
         env: Environment,
         *,
         environment_name: str,
-        backend_stack_name: str,
         frontend_bucket_name: str,
         frontend_github_oidc_subject: str | None = None,
         frontend_preview_github_oidc_subject: str | None = None,
@@ -107,30 +106,6 @@ class GitHubOidcStack(Stack):
                     ],
                 )
             )
-
-            stack_arn_prefix = f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/"
-            cdk_deploy_role.add_to_policy(
-                iam.PolicyStatement(
-                    actions=["cloudformation:DescribeStacks"],
-                    resources=[f"{stack_arn_prefix}{backend_stack_name}/*"],
-                )
-            )
-            if environment_name in {"dev", "staging"}:
-                # CloudFormation generates the table name from the stack name
-                # and logical ID. Cleanup is limited to synthetic EINs.
-                cdk_deploy_role.add_to_policy(
-                    iam.PolicyStatement(
-                        actions=["dynamodb:DeleteItem"],
-                        resources=[
-                            f"arn:{self.partition}:dynamodb:{self.region}:"
-                            f"{self.account}:table/{backend_stack_name}-NafnPartnersTable*"
-                        ],
-                        conditions={
-                            "ForAllValues:StringLike": {"dynamodb:LeadingKeys": "00*"},
-                            "Null": {"dynamodb:LeadingKeys": "false"},
-                        },
-                    )
-                )
 
             CfnOutput(self, "CdkDeployRoleArn", value=cdk_deploy_role.role_arn)
 

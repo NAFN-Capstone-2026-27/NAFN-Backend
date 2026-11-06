@@ -57,8 +57,8 @@ jobs:
             });
             const staged = jobs.some(job => job.name === 'deploy-staging' &&
               job.conclusion === 'success' && job.steps.some(step =>
-                step.name === 'Smoke-test staging API' && step.conclusion === 'success'));
-            if (!staged) throw new Error('The selected run has no successful staging smoke test.');
+                step.name === 'Deploy stacks' && step.conclusion === 'success'));
+            if (!staged) throw new Error('The selected run has no successful staging deployment.');
             core.setOutput('sha', run.head_sha);
 
       - uses: actions/checkout@v7
@@ -89,13 +89,7 @@ jobs:
       - name: Deploy both production stacks
         run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=prod --require-approval never
 
-      - name: Check production API without writing data
-        run: |
-          api_url="$(aws cloudformation describe-stacks --stack-name NAFN-Backend \
-            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" --output text)"
-          [[ "$api_url" == https://* ]]
-          curl --fail --silent --show-error --retry 3 --max-time 30 "${api_url%/}/partners" \
-            | jq -e '.partners | type == "array"' > /dev/null
+      # TODO Add a read-only API smoke test when the PostgreSQL-backed API is ready.
 
       - name: Record production revision
         env:

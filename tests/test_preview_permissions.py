@@ -36,7 +36,6 @@ class PreviewPermissionsTests(unittest.TestCase):
             "PermissionsTest",
             env,
             environment_name="dev",
-            backend_stack_name="NAFN-Backend",
             frontend_bucket_name=config["domain_name"],
             frontend_github_oidc_subject=config.get("frontend_github_oidc_subject"),
             frontend_preview_github_oidc_subject=config[
@@ -237,7 +236,6 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     f"{name}OidcTest",
                     env,
                     environment_name=name,
-                    backend_stack_name="NAFN-Backend",
                     frontend_bucket_name=config["domain_name"],
                     frontend_github_oidc_subject=config["frontend_github_oidc_subject"],
                     frontend_preview_github_oidc_subject=config.get(

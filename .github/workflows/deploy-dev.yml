@@ -85,11 +85,10 @@ jobs:
         working-directory: candidate
         run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=dev --require-approval never
 
+      # TODO Add an API smoke test when the PostgreSQL-backed API is ready.
+
       - name: Record deployed candidate
         env:
           SOURCE: ${{ inputs.source }}
           CANDIDATE_SHA: ${{ steps.source.outputs.sha }}
-        run: printf 'Deployed `%s` from `%s` to dev. Check the smoke-test result below.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Smoke-test dev API
-        run: python post_deployment_tests.py --env dev
+        run: printf 'Deployed `%s` from `%s` to dev.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"

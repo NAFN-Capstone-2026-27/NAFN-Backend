@@ -133,16 +133,17 @@ authenticated account before deploying.
 - **Dev** — **Deploy backend PR to dev** accepts an open same-repo PR number or
   `main` as a restore source. Users with repository write access can run it.
   The workflow authenticates to dev before CDK synthesizes and deploys the
-  selected revision, then smoke-tests the shared API.
-- **Staging** — Pushes to `main` deploy both stacks and run the staging API smoke
-  test. A successful run summary includes the run ID for production promotion.
+  selected revision.
+- **Staging** — Pushes to `main` deploy both stacks. A successful run summary
+  includes the run ID for production promotion.
 - **Prod** — **Promote backend to production** is a maintainer-only workflow
   that accepts a successful staging run ID. It authenticates to prod, logs a
-  CDK diff for that revision, deploys both stacks, and runs a read-only API check.
+  CDK diff for that revision and deploys both stacks.
 
-## Backend smoke tests
+## Manual backend smoke tests
 
-`post_deployment_tests.py` creates a dummy partner with an EIN starting with
+`post_deployment_tests.py` checks the existing DynamoDB-backed API. It creates a
+dummy partner with an EIN starting with
 `00`, checks duplicate and validation errors, checks that `GET /partners`
 lists it, and deletes the dummy record. It exits nonzero if a check fails.
 
