@@ -1,4 +1,4 @@
-// CDK replaces this placeholder with the configured domain at synthesis time.
+// CDK supplies the domain and preview setting at synthesis time.
 var routingConfig = __ROUTING_CONFIG__;
 
 function notFound() {
@@ -14,6 +14,7 @@ function handler(event) {
     var prefix = '';
     if (hostname !== routingConfig.domainName &&
         hostname !== event.context.distributionDomainName) {
+        if (!routingConfig.enablePreviews) return notFound();
         var suffix = '.' + routingConfig.domainName;
         if (!hostname.endsWith(suffix)) return notFound();
         var label = hostname.slice(0, -suffix.length);

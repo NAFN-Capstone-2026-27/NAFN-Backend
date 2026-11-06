@@ -1,0 +1,90 @@
+name: Deploy backend PR to dev
+
+on:
+  push:
+    branches: [backend-dev-test-v2]
+
+permissions: {}
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/backend-dev-test-v2'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: dev
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - name: Resolve candidate
+        id: source
+        uses: actions/github-script@v8
+        env:
+          SOURCE: '17'
+        with:
+          script: |
+            const source = process.env.SOURCE.trim();
+            if (source === 'main') {
+              core.setOutput('sha', context.sha);
+              return;
+            }
+            if (!/^[1-9]\d*$/.test(source)) {
+              throw new Error('Enter an open backend PR number or main.');
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: Number(source)
+            });
+            if (pr.state !== 'open' || pr.base.ref !== 'main' ||
+                pr.head.repo?.id !== context.payload.repository.id) {
+              throw new Error('Select an open same-repository PR targeting main.');
+            }
+            core.setOutput('sha', pr.head.sha);
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Verify dev target
+        id: target
+        run: |
+          account="$(jq -er '.context.environments.dev.account | select(length > 0)' cdk.json)"
+          region="$(jq -er '.context.environments.dev.region | select(length > 0)' cdk.json)"
+          jq -e --arg account "$account" --arg region "$region" '
+            .context.environments.dev | .account == $account and .region == $region
+          ' candidate/cdk.json > /dev/null
+          printf 'account=%s\nregion=%s\n' "$account" "$region" >> "$GITHUB_OUTPUT"
+
+      - name: Set up CDK
+        uses: ./.github/actions/setup-cdk
+        with:
+          project-directory: ./candidate
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.target.outputs.region }}
+          allowed-account-ids: ${{ steps.target.outputs.account }}
+
+      - name: Deploy both dev stacks
+        working-directory: candidate
+        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=dev --require-approval never
+
+      # TODO Add an API smoke test when the PostgreSQL-backed API is ready.
+
+      - name: Record deployed candidate
+        env:
+          SOURCE: '17'
+          CANDIDATE_SHA: ${{ steps.source.outputs.sha }}
+        run: printf 'Deployed `%s` from `%s` to dev.\n' "$CANDIDATE_SHA" "$SOURCE" >> "$GITHUB_STEP_SUMMARY"
