@@ -2,12 +2,11 @@
 
 import base64
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr
-
 from common import (
     json_response,
     normalize_ein,
@@ -17,7 +16,6 @@ from common import (
     parse_json_body,
     validate_focus_areas,
 )
-
 
 table = boto3.resource("dynamodb").Table(os.environ["PARTNERS_TABLE_NAME"])
 
@@ -40,7 +38,7 @@ def handler(event, context):
         return json_response(409, {"error": "A partner with this EIN already exists."})
 
     partner["partnerId"] = str(uuid4())
-    partner["createdAt"] = datetime.now(timezone.utc).isoformat()
+    partner["createdAt"] = datetime.now(UTC).isoformat()
     try:
         table.put_item(Item=partner, ConditionExpression=Attr("partnerId").not_exists())
     except table.meta.client.exceptions.ConditionalCheckFailedException:

@@ -13,12 +13,17 @@ import boto3
 from boto3.dynamodb.conditions import Attr
 from botocore.stub import ANY, Stubber
 
-
-LAMBDA_DIR = Path(__file__).resolve().parents[1] / "NAFNBackend/BackendInfrastructure/lambda"
-with patch.dict(os.environ, {"PARTNERS_TABLE_NAME": "test-partners"}), \
-     patch.object(sys, "path", [str(LAMBDA_DIR), *sys.path]), \
-     patch("boto3.resource"):
-    create_partner = importlib.import_module("NAFNBackend.BackendInfrastructure.lambda.create_partner")
+LAMBDA_DIR = (
+    Path(__file__).resolve().parents[1] / "NAFNBackend/BackendInfrastructure/lambda"
+)
+with (
+    patch.dict(os.environ, {"PARTNERS_TABLE_NAME": "test-partners"}),
+    patch.object(sys, "path", [str(LAMBDA_DIR), *sys.path]),
+    patch("boto3.resource"),
+):
+    create_partner = importlib.import_module(
+        "NAFNBackend.BackendInfrastructure.lambda.create_partner"
+    )
 
 
 class ConditionalFailure(Exception):
@@ -29,7 +34,9 @@ class CreatePartnerTests(unittest.TestCase):
     def setUp(self):
         self.table = MagicMock()
         self.table.name = "test-partners"
-        self.table.meta.client.exceptions.ConditionalCheckFailedException = ConditionalFailure
+        self.table.meta.client.exceptions.ConditionalCheckFailedException = (
+            ConditionalFailure
+        )
         self.paginator = self.table.meta.client.get_paginator.return_value
         self.paginator.paginate.return_value = iter([{"Items": []}])
         self.table_patch = patch.object(create_partner, "table", self.table)
@@ -40,15 +47,23 @@ class CreatePartnerTests(unittest.TestCase):
             "address": " 1 Example St ",
             "email": " contact@example.org ",
             "phone": "(303) 555-0100",
-            "focusAreas": ["Domestic Violence", "Climate Emergency", "Domestic Violence"],
+            "focusAreas": [
+                "Domestic Violence",
+                "Climate Emergency",
+                "Domestic Violence",
+            ],
         }
 
     def submit(self, payload=None):
-        response = create_partner.handler({"body": json.dumps(self.payload if payload is None else payload)}, None)
+        response = create_partner.handler(
+            {"body": json.dumps(self.payload if payload is None else payload)}, None
+        )
         return response["statusCode"], json.loads(response["body"])
 
     def test_partner_without_ein_gets_generated_identity_and_cleaned_fields(self):
-        self.payload.update({"partnerId": "client-id", "createdAt": "client-time", "extra": "discard"})
+        self.payload.update(
+            {"partnerId": "client-id", "createdAt": "client-time", "extra": "discard"}
+        )
         status, body = self.submit()
         self.assertEqual(status, 201)
         self.assertEqual(UUID(body["partnerId"]).version, 4)
@@ -58,9 +73,22 @@ class CreatePartnerTests(unittest.TestCase):
         self.assertEqual(body["email"], "contact@example.org")
         self.assertEqual(body["phone"], "3035550100")
         self.assertEqual(body["focusAreas"], ["Domestic Violence", "Climate Emergency"])
-        self.assertEqual(set(body), {"partnerId", "createdAt", "name", "address", "email", "phone", "focusAreas"})
+        self.assertEqual(
+            set(body),
+            {
+                "partnerId",
+                "createdAt",
+                "name",
+                "address",
+                "email",
+                "phone",
+                "focusAreas",
+            },
+        )
         self.table.meta.client.get_paginator.assert_not_called()
-        self.table.put_item.assert_called_once_with(Item=body, ConditionExpression=Attr("partnerId").not_exists())
+        self.table.put_item.assert_called_once_with(
+            Item=body, ConditionExpression=Attr("partnerId").not_exists()
+        )
 
     def test_blank_and_null_eins_are_omitted_without_a_scan(self):
         for value in ("", " ", None):
@@ -77,17 +105,23 @@ class CreatePartnerTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(body["ein"], "012345678")
         self.paginator.paginate.assert_called_once_with(
-            TableName="test-partners", FilterExpression=Attr("ein").eq("012345678"),
-            ProjectionExpression="partnerId", ConsistentRead=True,
+            TableName="test-partners",
+            FilterExpression=Attr("ein").eq("012345678"),
+            ProjectionExpression="partnerId",
+            ConsistentRead=True,
         )
-        self.assertEqual(self.table.put_item.call_args.kwargs["Item"]["ein"], "012345678")
+        self.assertEqual(
+            self.table.put_item.call_args.kwargs["Item"]["ein"], "012345678"
+        )
 
     def test_duplicate_on_later_page_returns_409_without_insertion(self):
         self.payload["ein"] = "12-3456789"
-        self.paginator.paginate.return_value = iter([
-            {"Items": [], "LastEvaluatedKey": {"partnerId": "earlier"}},
-            {"Items": [{"partnerId": "existing"}]},
-        ])
+        self.paginator.paginate.return_value = iter(
+            [
+                {"Items": [], "LastEvaluatedKey": {"partnerId": "earlier"}},
+                {"Items": [{"partnerId": "existing"}]},
+            ]
+        )
         status, body = self.submit()
         self.assertEqual(status, 409)
         self.assertIn("EIN", body["error"])
@@ -126,8 +160,12 @@ class CreatePartnerTests(unittest.TestCase):
         self.table.meta.client.get_paginator.assert_not_called()
 
     def test_invalid_ein_and_focus_areas_are_rejected(self):
-        for field, value in (("ein", 123456789), ("ein", "bad"),
-                             ("focusAreas", []), ("focusAreas", ["Other"])):
+        for field, value in (
+            ("ein", 123456789),
+            ("ein", "bad"),
+            ("focusAreas", []),
+            ("focusAreas", ["Other"]),
+        ):
             with self.subTest(field=field, value=value):
                 payload = {**self.payload, field: value}
                 self.assertEqual(self.submit(payload)[0], 400)
@@ -135,7 +173,9 @@ class CreatePartnerTests(unittest.TestCase):
         self.table.meta.client.get_paginator.assert_not_called()
 
     def test_location_fields_are_ignored_on_partner_submissions(self):
-        status, body = self.submit({**self.payload, "animalsAccepted": ["Dogs"], "timeLimits": "30 days"})
+        status, body = self.submit(
+            {**self.payload, "animalsAccepted": ["Dogs"], "timeLimits": "30 days"}
+        )
         self.assertEqual(status, 201)
         self.assertNotIn("animalsAccepted", body)
         self.assertNotIn("timeLimits", body)
@@ -170,27 +210,44 @@ class CreatePartnerTests(unittest.TestCase):
     def test_invalid_base64_or_utf8_returns_400(self):
         for body in ("!!", None, base64.b64encode(b"\xff").decode()):
             with self.subTest(body=body):
-                response = create_partner.handler({"body": body, "isBase64Encoded": True}, None)
+                response = create_partner.handler(
+                    {"body": body, "isBase64Encoded": True}, None
+                )
                 self.assertEqual(response["statusCode"], 400)
         self.table.put_item.assert_not_called()
 
     def test_real_sdk_paginator_marshals_filter_and_advances_past_empty_page(self):
         resource = boto3.Session(
-            aws_access_key_id="testing", aws_secret_access_key="testing",
+            aws_access_key_id="testing",
+            aws_secret_access_key="testing",
             region_name="us-east-1",
         ).resource("dynamodb")
         client = resource.meta.client
         expected = {
-            "TableName": "test-partners", "FilterExpression": ANY,
-            "ProjectionExpression": "partnerId", "ConsistentRead": True,
+            "TableName": "test-partners",
+            "FilterExpression": ANY,
+            "ProjectionExpression": "partnerId",
+            "ConsistentRead": True,
         }
-        with Stubber(client) as stubber, patch.object(create_partner, "table", resource.Table("test-partners")):
-            stubber.add_response("scan", {
-                "Items": [], "LastEvaluatedKey": {"partnerId": {"S": "first-page"}},
-            }, expected)
-            stubber.add_response("scan", {
-                "Items": [{"partnerId": {"S": "existing"}}],
-            }, {**expected, "ExclusiveStartKey": ANY})
+        with (
+            Stubber(client) as stubber,
+            patch.object(create_partner, "table", resource.Table("test-partners")),
+        ):
+            stubber.add_response(
+                "scan",
+                {
+                    "Items": [],
+                    "LastEvaluatedKey": {"partnerId": {"S": "first-page"}},
+                },
+                expected,
+            )
+            stubber.add_response(
+                "scan",
+                {
+                    "Items": [{"partnerId": {"S": "existing"}}],
+                },
+                {**expected, "ExclusiveStartKey": ANY},
+            )
             self.assertTrue(create_partner.ein_exists("012345678"))
             stubber.assert_no_pending_responses()
 

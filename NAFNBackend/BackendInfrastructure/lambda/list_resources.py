@@ -3,7 +3,6 @@
 import os
 
 import boto3
-
 from common import json_response
 
 table = boto3.resource("dynamodb").Table(os.environ["RESOURCES_TABLE_NAME"])

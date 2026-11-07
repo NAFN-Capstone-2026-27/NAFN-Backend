@@ -45,9 +45,14 @@ def run_checks(session, config):
     outputs = stack_outputs(session, f"{config['project_name']}-Backend")
     required = {"ApiUrl", "PartnersTableName", "ResourcesTableName"}
     if not required.issubset(outputs):
-        raise ValueError("Deploy the new backend first: required table/API outputs are missing.")
+        raise ValueError(
+            "Deploy the new backend first: required table/API outputs are missing."
+        )
     base_url = outputs["ApiUrl"].rstrip("/")
-    if not re.fullmatch(rf"https://[a-z0-9]+\.execute-api\.{re.escape(config['region'])}\.amazonaws\.com", base_url):
+    if not re.fullmatch(
+        rf"https://[a-z0-9]+\.execute-api\.{re.escape(config['region'])}\.amazonaws\.com",
+        base_url,
+    ):
         raise ValueError("ApiUrl must be this region's generated API Gateway endpoint.")
     db = session.resource("dynamodb")
     partners_table = db.Table(outputs["PartnersTableName"])
@@ -67,9 +72,13 @@ def run_checks(session, config):
         "focusAreas": ["Domestic Violence", "Climate Emergency"],
     }
     resource = {
-        "name": f"{prefix} Location", "category": "Temporary Foster Services",
-        "address": "1 Test St, Denver CO 80202", "lat": 39.7392, "lng": -104.9903,
-        "animalsAccepted": ["Dogs", "Cats"], "timeLimits": "Up to 30 days",
+        "name": f"{prefix} Location",
+        "category": "Temporary Foster Services",
+        "address": "1 Test St, Denver CO 80202",
+        "lat": 39.7392,
+        "lng": -104.9903,
+        "animalsAccepted": ["Dogs", "Cats"],
+        "timeLimits": "Up to 30 days",
     }
     created = []
     results = []
@@ -85,12 +94,23 @@ def run_checks(session, config):
     try:
         status, body = post(partners_url, partner, partners_table, "partnerId")
         partner_id = body.get("partnerId")
-        results.append(check("Create partner with normalized EIN and generated UUID/time",
-            status == 201 and is_uuid(partner_id) and bool(body.get("createdAt"))
-            and body.get("ein") == ein and body.get("phone") == "3035550100", status, body))
+        results.append(
+            check(
+                "Create partner with normalized EIN and generated UUID/time",
+                status == 201
+                and is_uuid(partner_id)
+                and bool(body.get("createdAt"))
+                and body.get("ein") == ein
+                and body.get("phone") == "3035550100",
+                status,
+                body,
+            )
+        )
 
         status, body = post(partners_url, partner, partners_table, "partnerId")
-        results.append(check("Duplicate normalized EIN returns 409", status == 409, status, body))
+        results.append(
+            check("Duplicate normalized EIN returns 409", status == 409, status, body)
+        )
 
         for label, ein_value in (("omitted", None), ("blank", " ")):
             payload = {**partner, "name": f"{prefix} EIN {label}"}
@@ -99,31 +119,93 @@ def run_checks(session, config):
             else:
                 payload["ein"] = ein_value
             status, body = post(partners_url, payload, partners_table, "partnerId")
-            results.append(check(f"Optional EIN {label}: partner created without EIN attribute",
-                status == 201 and is_uuid(body.get("partnerId")) and "ein" not in body, status, body))
+            results.append(
+                check(
+                    f"Optional EIN {label}: partner created without EIN attribute",
+                    status == 201
+                    and is_uuid(body.get("partnerId"))
+                    and "ein" not in body,
+                    status,
+                    body,
+                )
+            )
 
-        status, body = post(partners_url, {"name": f"{prefix} Invalid"}, partners_table, "partnerId")
-        results.append(check("Missing partner fields return 400", status == 400 and bool(body.get("errors")), status, body))
+        status, body = post(
+            partners_url, {"name": f"{prefix} Invalid"}, partners_table, "partnerId"
+        )
+        results.append(
+            check(
+                "Missing partner fields return 400",
+                status == 400 and bool(body.get("errors")),
+                status,
+                body,
+            )
+        )
 
         status, body = request("GET", partners_url)
         expected_ids = {item[2] for item in created if item[1] == "partnerId"}
         listed_ids = {item.get("partnerId") for item in body.get("partners", [])}
-        results.append(check("Partner listing contains this run's created partners",
-            status == 200 and bool(expected_ids) and expected_ids.issubset(listed_ids), status, body))
+        results.append(
+            check(
+                "Partner listing contains this run's created partners",
+                status == 200
+                and bool(expected_ids)
+                and expected_ids.issubset(listed_ids),
+                status,
+                body,
+            )
+        )
 
         if is_uuid(partner_id):
-            status, body = post(resources_url, {**resource, "partnerId": partner_id}, resources_table, "resourceId")
-            results.append(check("Create linked resource with numeric coordinates",
-                status == 201 and is_uuid(body.get("resourceId")) and bool(body.get("createdAt"))
-                and body.get("partnerId") == partner_id and coordinates_are_numbers(body)
-                and body.get("lat") == resource["lat"] and body.get("lng") == resource["lng"], status, body))
+            status, body = post(
+                resources_url,
+                {**resource, "partnerId": partner_id},
+                resources_table,
+                "resourceId",
+            )
+            results.append(
+                check(
+                    "Create linked resource with numeric coordinates",
+                    status == 201
+                    and is_uuid(body.get("resourceId"))
+                    and bool(body.get("createdAt"))
+                    and body.get("partnerId") == partner_id
+                    and coordinates_are_numbers(body)
+                    and body.get("lat") == resource["lat"]
+                    and body.get("lng") == resource["lng"],
+                    status,
+                    body,
+                )
+            )
         else:
-            results.append(check("Create linked resource", False, 0, {"error": "Partner creation failed"}))
+            results.append(
+                check(
+                    "Create linked resource",
+                    False,
+                    0,
+                    {"error": "Partner creation failed"},
+                )
+            )
 
-        status, body = post(resources_url, {**resource, "name": f"{prefix} Independent", "lat": 0, "lng": 0}, resources_table, "resourceId")
-        results.append(check("Create independent resource with zero coordinates",
-            status == 201 and is_uuid(body.get("resourceId")) and "partnerId" not in body
-            and coordinates_are_numbers(body) and body.get("lat") == 0 and body.get("lng") == 0, status, body))
+        status, body = post(
+            resources_url,
+            {**resource, "name": f"{prefix} Independent", "lat": 0, "lng": 0},
+            resources_table,
+            "resourceId",
+        )
+        results.append(
+            check(
+                "Create independent resource with zero coordinates",
+                status == 201
+                and is_uuid(body.get("resourceId"))
+                and "partnerId" not in body
+                and coordinates_are_numbers(body)
+                and body.get("lat") == 0
+                and body.get("lng") == 0,
+                status,
+                body,
+            )
+        )
 
         for label, override in (
             ("invalid category", {"category": "Unknown"}),
@@ -132,14 +214,29 @@ def run_checks(session, config):
         ):
             payload = {**resource, "name": f"{prefix} {label}", **override}
             status, body = post(resources_url, payload, resources_table, "resourceId")
-            results.append(check(f"Resource {label} returns 400", status == 400 and bool(body.get("errors")), status, body))
+            results.append(
+                check(
+                    f"Resource {label} returns 400",
+                    status == 400 and bool(body.get("errors")),
+                    status,
+                    body,
+                )
+            )
 
         status, body = request("GET", resources_url)
         expected_ids = {item[2] for item in created if item[1] == "resourceId"}
         listed = {item.get("resourceId"): item for item in body.get("resources", [])}
-        results.append(check("Resource listing includes created records with numeric coordinates",
-            status == 200 and bool(expected_ids) and expected_ids.issubset(listed)
-            and all(coordinates_are_numbers(listed[key]) for key in expected_ids), status, body))
+        results.append(
+            check(
+                "Resource listing includes created records with numeric coordinates",
+                status == 200
+                and bool(expected_ids)
+                and expected_ids.issubset(listed)
+                and all(coordinates_are_numbers(listed[key]) for key in expected_ids),
+                status,
+                body,
+            )
+        )
     finally:
         # Reverse creation order removes linked resources before partners.
         cleanup_errors = []
@@ -167,43 +264,70 @@ def is_uuid(value):
 
 
 def coordinates_are_numbers(item):
-    return all(isinstance(item.get(key), (int, float)) and not isinstance(item[key], bool) for key in ("lat", "lng"))
+    return all(
+        isinstance(item.get(key), (int, float)) and not isinstance(item[key], bool)
+        for key in ("lat", "lng")
+    )
 
 
 def check_target_is_writable(env_name, environments, session):
     if env_name not in WRITABLE_ENVIRONMENTS:
-        raise ValueError(f"Refusing to write to '{env_name}'; allowed: {sorted(WRITABLE_ENVIRONMENTS)}.")
+        raise ValueError(
+            f"Refusing to write to '{env_name}'; allowed: {sorted(WRITABLE_ENVIRONMENTS)}."
+        )
     config = environments[env_name]
     account = session.client("sts").get_caller_identity()["Account"]
     if account != config["account"]:
-        raise ValueError(f"Credentials are for account {account}, not {config['account']} ({env_name}).")
+        raise ValueError(
+            f"Credentials are for account {account}, not {config['account']} ({env_name})."
+        )
     if session.region_name != config["region"]:
-        raise ValueError("AWS session region does not match the configured environment.")
+        raise ValueError(
+            "AWS session region does not match the configured environment."
+        )
     for other_name, other in environments.items():
         if other_name not in WRITABLE_ENVIRONMENTS and all(
-            other.get(key) == config[key] for key in ("account", "region", "project_name")
+            other.get(key) == config[key]
+            for key in ("account", "region", "project_name")
         ):
-            raise ValueError(f"'{env_name}' shares a stack with disallowed environment '{other_name}'.")
+            raise ValueError(
+                f"'{env_name}' shares a stack with disallowed environment '{other_name}'."
+            )
 
 
 def delete_test_record(table, key, identifier, name):
-    if key not in {"partnerId", "resourceId"} or not is_uuid(identifier) or not name.startswith("Post-Deployment Test "):
+    if (
+        key not in {"partnerId", "resourceId"}
+        or not is_uuid(identifier)
+        or not name.startswith("Post-Deployment Test ")
+    ):
         raise ValueError("Refusing to delete a record without a valid test identity.")
     try:
-        table.delete_item(Key={key: identifier}, ConditionExpression=Attr("name").eq(name))
+        table.delete_item(
+            Key={key: identifier}, ConditionExpression=Attr("name").eq(name)
+        )
         print(f"Cleaned up {key}={identifier}")
     except table.meta.client.exceptions.ConditionalCheckFailedException as error:
-        raise RuntimeError(f"Cleanup skipped: {key}={identifier} is missing or its name changed.") from error
+        raise RuntimeError(
+            f"Cleanup skipped: {key}={identifier} is missing or its name changed."
+        ) from error
 
 
 def stack_outputs(session, stack_name):
-    stack = session.client("cloudformation").describe_stacks(StackName=stack_name)["Stacks"][0]
-    return {output["OutputKey"]: output["OutputValue"] for output in stack.get("Outputs", [])}
+    stack = session.client("cloudformation").describe_stacks(StackName=stack_name)[
+        "Stacks"
+    ][0]
+    return {
+        output["OutputKey"]: output["OutputValue"]
+        for output in stack.get("Outputs", [])
+    }
 
 
 def request(method, url, payload=None):
     data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=data, method=method, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             status, raw = response.status, response.read()

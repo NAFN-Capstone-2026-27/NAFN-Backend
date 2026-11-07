@@ -6,7 +6,6 @@ import re
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-
 FOCUS_AREAS = (
     "Domestic Violence",
     "Rehabilitation",
@@ -126,7 +125,7 @@ def normalize_website(value):
             and not any(char.isspace() for char in cleaned)
         )
         # Accessing port also validates malformed or out-of-range port numbers.
-        parsed.port
+        _ = parsed.port
     except ValueError:
         valid = False
     if not valid:
@@ -139,7 +138,9 @@ def parse_json_body(body):
     if not isinstance(body, str) or not body.strip():
         raise ValueError("Request body must be valid JSON.")
     try:
-        payload = json.loads(body, parse_float=Decimal, parse_constant=_invalid_constant)
+        payload = json.loads(
+            body, parse_float=Decimal, parse_constant=_invalid_constant
+        )
     except (ValueError, ArithmeticError) as error:
         raise ValueError("Request body must be valid JSON.") from error
     if not isinstance(payload, dict):

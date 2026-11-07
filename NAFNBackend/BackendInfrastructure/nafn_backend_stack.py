@@ -8,8 +8,10 @@ from aws_cdk import (
     aws_apigatewayv2 as apigw,
     aws_apigatewayv2_integrations as integrations,
     aws_dynamodb as dynamodb,
+    aws_ec2 as ec2,
     aws_lambda as lambda_,
     aws_logs as logs,
+    aws_rds as rds,
 )
 from constructs import Construct
 
@@ -17,20 +19,22 @@ LAMBDA_DIR = Path(__file__).parent / "lambda"
 
 
 class NafnBackendStack(Stack):
-
     def __init__(
         self,
         scope: Construct,
         construct_id: str,
         domain_name: str,
         *,
+        db_instance_class: str,
+        db_instance_size: str,
         cors_allow_origins: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         self.partners_table = dynamodb.TableV2(
-            self, "NafnPartnersV2Table",
+            self,
+            "NafnPartnersV2Table",
             partition_key=dynamodb.Attribute(
                 name="partnerId", type=dynamodb.AttributeType.STRING
             ),
@@ -42,7 +46,8 @@ class NafnBackendStack(Stack):
         )
 
         self.resources_table = dynamodb.TableV2(
-            self, "NafnResourcesTable",
+            self,
+            "NafnResourcesTable",
             partition_key=dynamodb.Attribute(
                 name="resourceId", type=dynamodb.AttributeType.STRING
             ),
@@ -59,7 +64,8 @@ class NafnBackendStack(Stack):
         )
 
         self.create_partner_function = lambda_.Function(
-            self, "NafnCreatePartnerFunction",
+            self,
+            "NafnCreatePartnerFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="create_partner.handler",
@@ -68,7 +74,8 @@ class NafnBackendStack(Stack):
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
             log_group=logs.LogGroup(
-                self, "NafnCreatePartnerLogs",
+                self,
+                "NafnCreatePartnerLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),
@@ -78,11 +85,11 @@ class NafnBackendStack(Stack):
         )
 
         self.api = apigw.HttpApi(
-            self, "NafnApi",
+            self,
+            "NafnApi",
             cors_preflight=apigw.CorsPreflightOptions(
                 allow_origins=(
-                    cors_allow_origins if cors_allow_origins is not None
-                    else ["*"]
+                    cors_allow_origins if cors_allow_origins is not None else ["*"]
                 ),
                 allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
                 allow_headers=["Content-Type"],
@@ -105,7 +112,8 @@ class NafnBackendStack(Stack):
         )
 
         self.list_partners_function = lambda_.Function(
-            self, "NafnListPartnersFunction",
+            self,
+            "NafnListPartnersFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="list_partners.handler",
@@ -114,7 +122,8 @@ class NafnBackendStack(Stack):
             memory_size=256,
             environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
             log_group=logs.LogGroup(
-                self, "NafnListPartnersLogs",
+                self,
+                "NafnListPartnersLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),
@@ -129,7 +138,8 @@ class NafnBackendStack(Stack):
         )
 
         self.create_resource_function = lambda_.Function(
-            self, "NafnCreateResourceFunction",
+            self,
+            "NafnCreateResourceFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="create_resource.handler",
@@ -141,7 +151,8 @@ class NafnBackendStack(Stack):
                 "PARTNERS_TABLE_NAME": self.partners_table.table_name,
             },
             log_group=logs.LogGroup(
-                self, "NafnCreateResourceLogs",
+                self,
+                "NafnCreateResourceLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),
@@ -157,7 +168,8 @@ class NafnBackendStack(Stack):
         )
 
         self.list_resources_function = lambda_.Function(
-            self, "NafnListResourcesFunction",
+            self,
+            "NafnListResourcesFunction",
             runtime=lambda_.Runtime.PYTHON_3_13,
             architecture=lambda_.Architecture.ARM_64,
             handler="list_resources.handler",
@@ -166,7 +178,8 @@ class NafnBackendStack(Stack):
             memory_size=256,
             environment={"RESOURCES_TABLE_NAME": self.resources_table.table_name},
             log_group=logs.LogGroup(
-                self, "NafnListResourcesLogs",
+                self,
+                "NafnListResourcesLogs",
                 retention=logs.RetentionDays.ONE_MONTH,
                 removal_policy=RemovalPolicy.DESTROY,
             ),
@@ -179,6 +192,63 @@ class NafnBackendStack(Stack):
                 "NafnListResourcesIntegration", self.list_resources_function
             ),
         )
+
+        # Set up private VPC network, database does not need internet access
+        self.vpc = ec2.Vpc(
+            self,
+            "NafnVpc",
+            nat_gateways=0,
+            subnet_configuration=[
+                ec2.SubnetConfiguration(
+                    name="isolated",
+                    subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
+                    cidr_mask=24,
+                ),
+            ],
+        )
+
+        # Firewall for the database, starts fully closed. Open port 5432 to
+        # Lambdas later with self.database.connections.allow_default_port_from(fn).
+        self.db_security_group = ec2.SecurityGroup(
+            self,
+            "NafnDbSecurityGroup",
+            vpc=self.vpc,
+            description="NAFN Postgres access",
+            allow_all_outbound=False,
+        )
+
+        # Postgres database
+        self.database = rds.DatabaseInstance(
+            self,
+            "NafnPostgres",
+            engine=rds.DatabaseInstanceEngine.postgres(
+                version=rds.PostgresEngineVersion.VER_18
+            ),
+            instance_type=ec2.InstanceType.of(
+                ec2.InstanceClass[db_instance_class], ec2.InstanceSize[db_instance_size]
+            ),
+            vpc=self.vpc,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
+            ),
+            security_groups=[self.db_security_group],
+            # Password is generated and stored in Secrets Manager, never in code.
+            credentials=rds.Credentials.from_generated_secret("nafn_admin"),
+            database_name="nafn",
+            allocated_storage=20,  # GB, minimum size for POSTGRES
+            max_allocated_storage=50,
+            storage_encrypted=True,
+            multi_az=False,
+            publicly_accessible=False,
+            # For experimentation, may have to change to true once moved to production
+            deletion_protection=False,
+            # Take a final snapshot instead of losing data if the DB is removed.
+            removal_policy=RemovalPolicy.SNAPSHOT,
+        )
+
+        # Print the DB address and password location after deploy
+        CfnOutput(self, "DbEndpoint", value=self.database.db_instance_endpoint_address)
+        CfnOutput(self, "DbSecretArn", value=self.database.secret.secret_arn)
 
         CfnOutput(self, "ApiUrl", value=self.api.api_endpoint)
         CfnOutput(self, "PartnersTableName", value=self.partners_table.table_name)

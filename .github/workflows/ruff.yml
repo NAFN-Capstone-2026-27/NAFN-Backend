@@ -1,0 +1,42 @@
+name: Ruff
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Lint
+        uses: astral-sh/ruff-action@v4.1.0
+        with:
+          version-file: pyproject.toml
+          args: check --output-format=github
+
+  format:
+    name: Ruff formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check formatting
+        uses: astral-sh/ruff-action@v4.1.0
+        with:
+          version-file: pyproject.toml
+          args: format --check --output-format=github

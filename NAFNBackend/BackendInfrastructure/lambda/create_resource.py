@@ -2,12 +2,11 @@
 
 import base64
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import boto3
 from boto3.dynamodb.conditions import Attr
-
 from common import (
     json_response,
     normalize_email,
@@ -19,7 +18,6 @@ from common import (
     validate_category,
     validate_coordinates,
 )
-
 
 dynamodb = boto3.resource("dynamodb")
 resources_table = dynamodb.Table(os.environ["RESOURCES_TABLE_NAME"])
@@ -46,10 +44,12 @@ def handler(event, context):
             ProjectionExpression="partnerId",
         ).get("Item")
         if not partner:
-            return json_response(400, {"errors": ["'partnerId' does not reference an existing partner."]})
+            return json_response(
+                400, {"errors": ["'partnerId' does not reference an existing partner."]}
+            )
 
     resource["resourceId"] = str(uuid4())
-    resource["createdAt"] = datetime.now(timezone.utc).isoformat()
+    resource["createdAt"] = datetime.now(UTC).isoformat()
     try:
         resources_table.put_item(
             Item=resource,
@@ -72,8 +72,12 @@ def validate_resource(body):
         "phone": normalize_phone,
         "website": normalize_website,
         "email": normalize_email,
-        "description": lambda value: normalize_text(value, "description", required=False),
-        "animalsAccepted": lambda value: normalize_string_list(value, "animalsAccepted"),
+        "description": lambda value: normalize_text(
+            value, "description", required=False
+        ),
+        "animalsAccepted": lambda value: normalize_string_list(
+            value, "animalsAccepted"
+        ),
         "timeLimits": lambda value: normalize_text(value, "timeLimits", required=False),
     }
     for field, validate in validators.items():
@@ -85,7 +89,9 @@ def validate_resource(body):
             errors.append(str(error))
 
     try:
-        resource["lat"], resource["lng"] = validate_coordinates(body.get("lat"), body.get("lng"))
+        resource["lat"], resource["lng"] = validate_coordinates(
+            body.get("lat"), body.get("lng")
+        )
     except ValueError as error:
         errors.append(str(error))
 

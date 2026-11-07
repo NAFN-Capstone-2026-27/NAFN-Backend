@@ -2,18 +2,15 @@
 
 from aws_cdk import App, Environment
 
-from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
+from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 
 app = App()
 
 environment_name = app.node.try_get_context("env")
 
 if not environment_name:
-    raise ValueError(
-        "Environment must be specified."
-        "Example: cdk deploy -c env=dev"
-    )
+    raise ValueError("Environment must be specified.Example: cdk deploy -c env=dev")
 
 environments = app.node.try_get_context("environments")
 
@@ -24,21 +21,34 @@ config = environments[environment_name]
 
 account = config["account"]
 region = config["region"]
+# TODO: These parameters should be tied to the account and region.
+cert_arn = config["certificate_arn"]
+hosted_zone_id = config["hosted_zone_id"]
+hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
 project_name = config["project_name"]
 
 env = Environment(account=account, region=region)
 
 FrontendStack(
-    app, f"{project_name}-Frontend", config["certificate_arn"],
-    config["hosted_zone_id"], config["hosted_zone_name"], domain_name, env,
+    app,
+    f"{project_name}-Frontend",
+    cert_arn,
+    hosted_zone_id,
+    hosted_zone_name,
+    domain_name,
+    env,
+    enable_previews=config.get("enable_previews", False),
     github_oidc_subject=config["github_oidc_subject"],
+    github_preview_oidc_subject=config.get("github_preview_oidc_subject"),
 )
 
 NafnBackendStack(
     app,
     f"{project_name}-Backend",
     domain_name,
+    db_instance_class=config["db_instance_class"],
+    db_instance_size=config["db_instance_size"],
     cors_allow_origins=config.get("cors_allow_origins"),
     env=env,
 )
