@@ -26,7 +26,7 @@ def handler(event, context):
         if event.get("isBase64Encoded"):
             body = base64.b64decode(body, validate=True).decode("utf-8")
         payload = parse_json_body(body)
-    except (ValueError, TypeError, UnicodeError) as error:
+    except (ValueError, TypeError) as error:
         return json_response(400, {"error": str(error)})
 
     partner, errors = validate_partner(payload)

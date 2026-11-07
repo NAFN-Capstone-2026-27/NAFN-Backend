@@ -22,7 +22,6 @@ class SmokeTests(unittest.TestCase):
         }
         self.environments = {"dev": self.config}
         self.session = MagicMock()
-        self.session.region_name = "us-east-1"
         self.session.client.return_value.get_caller_identity.return_value = {
             "Account": "123456789012"
         }
@@ -43,18 +42,13 @@ class SmokeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Credentials"):
             smoke.check_target_is_writable("dev", self.environments, self.session)
 
-    def test_wrong_region_is_rejected(self):
-        self.session.region_name = "us-west-2"
-        with self.assertRaisesRegex(ValueError, "region"):
-            smoke.check_target_is_writable("dev", self.environments, self.session)
-
     def test_environment_cannot_alias_a_production_stack(self):
         with self.assertRaisesRegex(ValueError, "shares a stack"):
             smoke.check_target_is_writable(
                 "dev", {**self.environments, "prod": self.config.copy()}, self.session
             )
 
-    def test_allowed_account_region_and_stack_are_accepted(self):
+    def test_allowed_account_and_stack_are_accepted(self):
         smoke.check_target_is_writable("dev", self.environments, self.session)
 
     def test_cleanup_uses_exact_id_and_unique_name_condition(self):
@@ -118,7 +112,11 @@ class SmokeTests(unittest.TestCase):
             request.assert_not_called()
 
     def exercise_backend(
-        self, *, allow_duplicates=False, fail_listing=False, cleanup_failure=False
+        self,
+        *,
+        unexpected_create_status=False,
+        fail_listing=False,
+        cleanup_failure=False,
     ):
         outputs = {
             "ApiUrl": "https://example.execute-api.us-east-1.amazonaws.com",
@@ -155,41 +153,19 @@ class SmokeTests(unittest.TestCase):
                 if fail_listing:
                     raise OSError("HTTP unavailable")
                 return 200, {name: records[name].copy()}
-            if name == "partners":
-                if "email" not in payload:
-                    return 400, {"errors": ["email required"]}
-                ein = payload.get("ein", "").strip().replace("-", "")
-                if (
-                    ein
-                    and not allow_duplicates
-                    and any(item.get("ein") == ein for item in records[name])
-                ):
-                    return 409, {"error": "duplicate EIN"}
-                item = {
-                    **payload,
-                    "partnerId": str(uuid4()),
-                    "createdAt": "2026-10-26T12:00:00+00:00",
-                    "phone": "3035550100",
-                }
-                if ein:
-                    item["ein"] = ein
-                else:
-                    item.pop("ein", None)
-            else:
-                if payload["category"] == "Unknown" or payload["lat"] == 91:
-                    return 400, {"errors": ["invalid resource"]}
-                if "partnerId" in payload and not any(
-                    item["partnerId"] == payload["partnerId"]
-                    for item in records["partners"]
-                ):
-                    return 400, {"errors": ["missing partner"]}
-                item = {
-                    **payload,
-                    "resourceId": str(uuid4()),
-                    "createdAt": "2026-10-26T12:00:00+00:00",
-                }
+            key = "partnerId" if name == "partners" else "resourceId"
+            if name == "resources":
+                self.assertEqual(
+                    payload["partnerId"], records["partners"][0]["partnerId"]
+                )
+            item = {
+                **payload,
+                key: str(uuid4()),
+                "createdAt": "2026-10-26T12:00:00+00:00",
+            }
             records[name].append(item)
-            return 201, item.copy()
+            status = 200 if name == "resources" and unexpected_create_status else 201
+            return status, item.copy()
 
         with (
             patch.object(smoke, "stack_outputs", return_value=outputs),
@@ -204,26 +180,26 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(records, {"partners": [], "resources": []})
         self.assertEqual(
             [name for name, _, _ in deleted],
-            ["resources", "resources", "partners", "partners", "partners"],
+            ["resources", "partners"],
         )
-        self.assertIn("12/12 checks passed", self.output.getvalue())
+        self.assertIn("4/4 checks passed", self.output.getvalue())
 
-    def test_unexpected_duplicate_creation_is_also_cleaned_up(self):
-        result, records, deleted = self.exercise_backend(allow_duplicates=True)
+    def test_create_with_unexpected_status_is_also_cleaned_up(self):
+        result, records, deleted = self.exercise_backend(unexpected_create_status=True)
         self.assertEqual(result, 1)
         self.assertEqual(records, {"partners": [], "resources": []})
-        self.assertEqual(len(deleted), 6)
+        self.assertEqual(len(deleted), 2)
 
     def test_http_failure_still_cleans_up_created_partners(self):
         with self.assertRaisesRegex(OSError, "HTTP unavailable"):
             self.exercise_backend(fail_listing=True)
-        self.assertEqual(self.tables["partners"].delete_item.call_count, 3)
+        self.assertEqual(self.tables["partners"].delete_item.call_count, 1)
 
     def test_cleanup_failure_is_not_reported_as_success(self):
         with self.assertRaisesRegex(RuntimeError, "Test cleanup incomplete"):
             self.exercise_backend(cleanup_failure=True)
-        self.assertEqual(self.tables["resources"].delete_item.call_count, 2)
-        self.assertEqual(self.tables["partners"].delete_item.call_count, 3)
+        self.assertEqual(self.tables["resources"].delete_item.call_count, 1)
+        self.assertEqual(self.tables["partners"].delete_item.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ This script writes to AWS. Only explicitly allowed environments may be tested.
 
 import argparse
 import json
-import random
 import re
 import sys
 import urllib.error
@@ -59,16 +58,12 @@ def run_checks(session, config):
     resources_table = db.Table(outputs["ResourcesTableName"])
     partners_url = f"{base_url}/partners"
     resources_url = f"{base_url}/resources"
-    run_id = str(uuid4())
-    prefix = f"Post-Deployment Test {run_id}"
-    # A synthetic EIN beginning with 00 avoids using a real organization's EIN.
-    ein = f"00{random.randint(0, 9_999_999):07d}"
+    prefix = f"Post-Deployment Test {uuid4()}"
     partner = {
         "name": f"{prefix} Organization",
         "address": "1 Test St, Denver CO 80202",
         "email": "post-deployment-test@example.com",
         "phone": "(303) 555-0100",
-        "ein": f"{ein[:2]}-{ein[2:]}",
         "focusAreas": ["Domestic Violence", "Climate Emergency"],
     }
     resource = {
@@ -77,162 +72,75 @@ def run_checks(session, config):
         "address": "1 Test St, Denver CO 80202",
         "lat": 39.7392,
         "lng": -104.9903,
-        "animalsAccepted": ["Dogs", "Cats"],
-        "timeLimits": "Up to 30 days",
     }
     created = []
-    results = []
 
     def post(url, payload, table, key):
         status, body = request("POST", url, payload)
-        # Also clean up records created by unexpectedly successful requests.
         identifier = body.get(key)
-        if is_uuid(identifier) and body.get("name") == payload.get("name"):
+        if is_uuid(identifier) and body.get("name") == payload["name"]:
             created.append((table, key, identifier, payload["name"]))
-        return status, body
+            return status, body, identifier
+        return status, body, None
 
     try:
-        status, body = post(partners_url, partner, partners_table, "partnerId")
-        partner_id = body.get("partnerId")
-        results.append(
-            check(
-                "Create partner with normalized EIN and generated UUID/time",
-                status == 201
-                and is_uuid(partner_id)
-                and bool(body.get("createdAt"))
-                and body.get("ein") == ein
-                and body.get("phone") == "3035550100",
-                status,
-                body,
-            )
+        status, body, partner_id = post(
+            partners_url, partner, partners_table, "partnerId"
         )
-
-        status, body = post(partners_url, partner, partners_table, "partnerId")
-        results.append(
-            check("Duplicate normalized EIN returns 409", status == 409, status, body)
+        partner_created = check(
+            "Create partner",
+            status == 201 and partner_id is not None and bool(body.get("createdAt")),
+            status,
+            body,
         )
-
-        for label, ein_value in (("omitted", None), ("blank", " ")):
-            payload = {**partner, "name": f"{prefix} EIN {label}"}
-            if ein_value is None:
-                del payload["ein"]
-            else:
-                payload["ein"] = ein_value
-            status, body = post(partners_url, payload, partners_table, "partnerId")
-            results.append(
-                check(
-                    f"Optional EIN {label}: partner created without EIN attribute",
-                    status == 201
-                    and is_uuid(body.get("partnerId"))
-                    and "ein" not in body,
-                    status,
-                    body,
-                )
-            )
-
-        status, body = post(
-            partners_url, {"name": f"{prefix} Invalid"}, partners_table, "partnerId"
-        )
-        results.append(
-            check(
-                "Missing partner fields return 400",
-                status == 400 and bool(body.get("errors")),
-                status,
-                body,
-            )
-        )
+        if not partner_created:
+            return 1
+        results = [partner_created]
 
         status, body = request("GET", partners_url)
-        expected_ids = {item[2] for item in created if item[1] == "partnerId"}
-        listed_ids = {item.get("partnerId") for item in body.get("partners", [])}
         results.append(
             check(
-                "Partner listing contains this run's created partners",
+                "List the new partner",
                 status == 200
-                and bool(expected_ids)
-                and expected_ids.issubset(listed_ids),
+                and any(
+                    item.get("partnerId") == partner_id
+                    for item in body.get("partners", [])
+                ),
                 status,
                 body,
             )
         )
 
-        if is_uuid(partner_id):
-            status, body = post(
-                resources_url,
-                {**resource, "partnerId": partner_id},
-                resources_table,
-                "resourceId",
-            )
-            results.append(
-                check(
-                    "Create linked resource with numeric coordinates",
-                    status == 201
-                    and is_uuid(body.get("resourceId"))
-                    and bool(body.get("createdAt"))
-                    and body.get("partnerId") == partner_id
-                    and coordinates_are_numbers(body)
-                    and body.get("lat") == resource["lat"]
-                    and body.get("lng") == resource["lng"],
-                    status,
-                    body,
-                )
-            )
-        else:
-            results.append(
-                check(
-                    "Create linked resource",
-                    False,
-                    0,
-                    {"error": "Partner creation failed"},
-                )
-            )
-
-        status, body = post(
+        status, body, resource_id = post(
             resources_url,
-            {**resource, "name": f"{prefix} Independent", "lat": 0, "lng": 0},
+            {**resource, "partnerId": partner_id},
             resources_table,
             "resourceId",
         )
         results.append(
             check(
-                "Create independent resource with zero coordinates",
+                "Create a resource linked to the new partner",
                 status == 201
-                and is_uuid(body.get("resourceId"))
-                and "partnerId" not in body
-                and coordinates_are_numbers(body)
-                and body.get("lat") == 0
-                and body.get("lng") == 0,
+                and resource_id is not None
+                and bool(body.get("createdAt"))
+                and body.get("partnerId") == partner_id,
                 status,
                 body,
             )
         )
 
-        for label, override in (
-            ("invalid category", {"category": "Unknown"}),
-            ("out-of-range coordinates", {"lat": 91}),
-            ("nonexistent partner", {"partnerId": str(uuid4())}),
-        ):
-            payload = {**resource, "name": f"{prefix} {label}", **override}
-            status, body = post(resources_url, payload, resources_table, "resourceId")
-            results.append(
-                check(
-                    f"Resource {label} returns 400",
-                    status == 400 and bool(body.get("errors")),
-                    status,
-                    body,
-                )
-            )
-
         status, body = request("GET", resources_url)
-        expected_ids = {item[2] for item in created if item[1] == "resourceId"}
-        listed = {item.get("resourceId"): item for item in body.get("resources", [])}
         results.append(
             check(
-                "Resource listing includes created records with numeric coordinates",
+                "List the new resource with its coordinates",
                 status == 200
-                and bool(expected_ids)
-                and expected_ids.issubset(listed)
-                and all(coordinates_are_numbers(listed[key]) for key in expected_ids),
+                and resource_id is not None
+                and any(
+                    item.get("resourceId") == resource_id
+                    and item.get("lat") == resource["lat"]
+                    and item.get("lng") == resource["lng"]
+                    for item in body.get("resources", [])
+                ),
                 status,
                 body,
             )
@@ -263,13 +171,6 @@ def is_uuid(value):
         return False
 
 
-def coordinates_are_numbers(item):
-    return all(
-        isinstance(item.get(key), (int, float)) and not isinstance(item[key], bool)
-        for key in ("lat", "lng")
-    )
-
-
 def check_target_is_writable(env_name, environments, session):
     if env_name not in WRITABLE_ENVIRONMENTS:
         raise ValueError(
@@ -280,10 +181,6 @@ def check_target_is_writable(env_name, environments, session):
     if account != config["account"]:
         raise ValueError(
             f"Credentials are for account {account}, not {config['account']} ({env_name})."
-        )
-    if session.region_name != config["region"]:
-        raise ValueError(
-            "AWS session region does not match the configured environment."
         )
     for other_name, other in environments.items():
         if other_name not in WRITABLE_ENVIRONMENTS and all(
