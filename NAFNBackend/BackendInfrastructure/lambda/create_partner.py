@@ -1,6 +1,5 @@
 """POST /partners: validate and create a UUID-keyed organization record."""
 
-import base64
 import os
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -22,11 +21,8 @@ table = boto3.resource("dynamodb").Table(os.environ["PARTNERS_TABLE_NAME"])
 
 def handler(event, context):
     try:
-        body = event.get("body")
-        if event.get("isBase64Encoded"):
-            body = base64.b64decode(body, validate=True).decode("utf-8")
-        payload = parse_json_body(body)
-    except (ValueError, TypeError) as error:
+        payload = parse_json_body(event.get("body"))
+    except ValueError as error:
         return json_response(400, {"error": str(error)})
 
     partner, errors = validate_partner(payload)
@@ -39,10 +35,7 @@ def handler(event, context):
 
     partner["partnerId"] = str(uuid4())
     partner["createdAt"] = datetime.now(UTC).isoformat()
-    try:
-        table.put_item(Item=partner, ConditionExpression=Attr("partnerId").not_exists())
-    except table.meta.client.exceptions.ConditionalCheckFailedException:
-        return json_response(409, {"error": "Partner ID collision; please retry."})
+    table.put_item(Item=partner)
 
     return json_response(201, partner)
 

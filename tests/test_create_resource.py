@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import boto3
-from boto3.dynamodb.conditions import Attr
 from botocore.stub import ANY, Stubber
 
 LAMBDA_DIR = (
@@ -33,16 +32,9 @@ with (
     )
 
 
-class ConditionalFailure(Exception):
-    pass
-
-
 class CreateResourceTests(unittest.TestCase):
     def setUp(self):
         self.resources = MagicMock()
-        self.resources.meta.client.exceptions.ConditionalCheckFailedException = (
-            ConditionalFailure
-        )
         self.partners = MagicMock()
         self.partner_id = "c215a75a-31e9-4a44-8f9f-936ec54ca928"
         self.partners.get_item.return_value = {"Item": {"partnerId": self.partner_id}}
@@ -94,10 +86,7 @@ class CreateResourceTests(unittest.TestCase):
         self.assertIsInstance(stored["lng"], Decimal)
         self.assertIsInstance(body["lat"], float)
         self.assertIsInstance(body["lng"], float)
-        self.assertEqual(
-            self.resources.put_item.call_args.kwargs["ConditionExpression"],
-            Attr("resourceId").not_exists(),
-        )
+        self.resources.put_item.assert_called_once_with(Item=stored)
 
     def test_optional_fields_are_cleaned_and_stored(self):
         self.payload.update(
@@ -210,12 +199,6 @@ class CreateResourceTests(unittest.TestCase):
             self.submit()
         self.resources.put_item.assert_not_called()
 
-    def test_resource_id_collision_returns_409(self):
-        self.resources.put_item.side_effect = ConditionalFailure()
-        status, body = self.submit()
-        self.assertEqual(status, 409)
-        self.assertIn("ID collision", body["error"])
-
     def test_unexpected_write_failure_is_not_swallowed(self):
         self.resources.put_item.side_effect = RuntimeError("write unavailable")
         with self.assertRaisesRegex(RuntimeError, "write unavailable"):
@@ -230,24 +213,12 @@ class CreateResourceTests(unittest.TestCase):
         self.resources.put_item.assert_not_called()
         self.partners.get_item.assert_not_called()
 
-    def test_base64_request_is_supported(self):
-        encoded = base64.b64encode(json.dumps(self.payload).encode()).decode()
-        self.assertEqual(
-            create_resource.handler({"body": encoded, "isBase64Encoded": True}, None)[
-                "statusCode"
-            ],
-            201,
+    def test_base64_encoded_request_is_rejected(self):
+        body = base64.b64encode(json.dumps(self.payload).encode()).decode()
+        response = create_resource.handler(
+            {"body": body, "isBase64Encoded": True}, None
         )
-
-    def test_invalid_base64_or_utf8_returns_400(self):
-        for body in ("!!", None, base64.b64encode(b"\xff").decode()):
-            with self.subTest(body=body):
-                self.assertEqual(
-                    create_resource.handler(
-                        {"body": body, "isBase64Encoded": True}, None
-                    )["statusCode"],
-                    400,
-                )
+        self.assertEqual(response["statusCode"], 400)
         self.resources.put_item.assert_not_called()
 
     def test_sdk_accepts_numeric_resource_and_partner_lookup(self):
@@ -282,7 +253,6 @@ class CreateResourceTests(unittest.TestCase):
                 {
                     "TableName": "test-resources",
                     "Item": ANY,
-                    "ConditionExpression": ANY,
                 },
             )
             self.assertEqual(self.submit()[0], 201)

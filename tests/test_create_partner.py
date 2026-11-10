@@ -26,17 +26,10 @@ with (
     )
 
 
-class ConditionalFailure(Exception):
-    pass
-
-
 class CreatePartnerTests(unittest.TestCase):
     def setUp(self):
         self.table = MagicMock()
         self.table.name = "test-partners"
-        self.table.meta.client.exceptions.ConditionalCheckFailedException = (
-            ConditionalFailure
-        )
         self.paginator = self.table.meta.client.get_paginator.return_value
         self.paginator.paginate.return_value = iter([{"Items": []}])
         self.table_patch = patch.object(create_partner, "table", self.table)
@@ -86,9 +79,7 @@ class CreatePartnerTests(unittest.TestCase):
             },
         )
         self.table.meta.client.get_paginator.assert_not_called()
-        self.table.put_item.assert_called_once_with(
-            Item=body, ConditionExpression=Attr("partnerId").not_exists()
-        )
+        self.table.put_item.assert_called_once_with(Item=body)
 
     def test_blank_and_null_eins_are_omitted_without_a_scan(self):
         for value in ("", " ", None):
@@ -183,13 +174,6 @@ class CreatePartnerTests(unittest.TestCase):
         self.assertNotIn("animalsAccepted", stored)
         self.assertNotIn("timeLimits", stored)
 
-    def test_id_collision_is_not_misreported_as_an_ein_duplicate(self):
-        self.table.put_item.side_effect = ConditionalFailure()
-        status, body = self.submit()
-        self.assertEqual(status, 409)
-        self.assertIn("ID collision", body["error"])
-        self.assertNotIn("EIN", body["error"])
-
     def test_unexpected_write_failure_is_not_swallowed(self):
         self.table.put_item.side_effect = RuntimeError("write unavailable")
         with self.assertRaisesRegex(RuntimeError, "write unavailable"):
@@ -202,18 +186,10 @@ class CreatePartnerTests(unittest.TestCase):
                 self.assertEqual(response["statusCode"], 400)
         self.table.put_item.assert_not_called()
 
-    def test_base64_encoded_request_is_supported(self):
+    def test_base64_encoded_request_is_rejected(self):
         body = base64.b64encode(json.dumps(self.payload).encode()).decode()
         response = create_partner.handler({"body": body, "isBase64Encoded": True}, None)
-        self.assertEqual(response["statusCode"], 201)
-
-    def test_invalid_base64_or_utf8_returns_400(self):
-        for body in ("!!", None, base64.b64encode(b"\xff").decode()):
-            with self.subTest(body=body):
-                response = create_partner.handler(
-                    {"body": body, "isBase64Encoded": True}, None
-                )
-                self.assertEqual(response["statusCode"], 400)
+        self.assertEqual(response["statusCode"], 400)
         self.table.put_item.assert_not_called()
 
     def test_real_sdk_paginator_marshals_filter_and_advances_past_empty_page(self):

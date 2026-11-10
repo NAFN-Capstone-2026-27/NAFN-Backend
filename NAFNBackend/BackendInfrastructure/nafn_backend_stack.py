@@ -34,7 +34,7 @@ class NafnBackendStack(Stack):
 
         self.partners_table = dynamodb.TableV2(
             self,
-            "NafnPartnersV2Table",
+            "NafnPartnersTable",
             partition_key=dynamodb.Attribute(
                 name="partnerId", type=dynamodb.AttributeType.STRING
             ),

@@ -88,8 +88,7 @@ Response 201: the cleaned partner above, with `partnerId` and `createdAt` added,
 
 - 400: invalid/missing required field or malformed supplied EIN/focus area.
 - 409: `{"error":"A partner with this EIN already exists."}` when a duplicate
-  is found. An extremely unlikely generated-ID collision also returns 409 with
-  `{"error":"Partner ID collision; please retry."}`.
+  is found.
 
 ### GET /partners
 
@@ -147,7 +146,6 @@ resource. Multiple resources can reference the same partner.
 Response 201: cleaned resource with generated `resourceId` and `createdAt`.
 
 - 400: invalid required/optional fields or nonexistent referenced partner.
-- 409: `{"error":"Resource ID collision; please retry."}` for a generated-ID collision.
 
 ### GET /resources
 

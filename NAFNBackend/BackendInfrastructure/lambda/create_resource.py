@@ -1,12 +1,10 @@
 """POST /resources: create a location/service, optionally linked to a partner."""
 
-import base64
 import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import boto3
-from boto3.dynamodb.conditions import Attr
 from common import (
     json_response,
     normalize_email,
@@ -26,11 +24,8 @@ partners_table = dynamodb.Table(os.environ["PARTNERS_TABLE_NAME"])
 
 def handler(event, context):
     try:
-        body = event.get("body")
-        if event.get("isBase64Encoded"):
-            body = base64.b64decode(body, validate=True).decode("utf-8")
-        payload = parse_json_body(body)
-    except (ValueError, TypeError) as error:
+        payload = parse_json_body(event.get("body"))
+    except ValueError as error:
         return json_response(400, {"error": str(error)})
 
     resource, errors = validate_resource(payload)
@@ -50,13 +45,7 @@ def handler(event, context):
 
     resource["resourceId"] = str(uuid4())
     resource["createdAt"] = datetime.now(UTC).isoformat()
-    try:
-        resources_table.put_item(
-            Item=resource,
-            ConditionExpression=Attr("resourceId").not_exists(),
-        )
-    except resources_table.meta.client.exceptions.ConditionalCheckFailedException:
-        return json_response(409, {"error": "Resource ID collision; please retry."})
+    resources_table.put_item(Item=resource)
 
     return json_response(201, resource)
 
