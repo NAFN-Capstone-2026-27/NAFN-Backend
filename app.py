@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import aws_cdk
 from aws_cdk import App, Environment
 
 from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
@@ -20,9 +19,6 @@ if environment_name not in environments:
 
 config = environments[environment_name]
 
-env = aws_cdk.Environment(account=config["account"], region=config["region"])
-
-# Intentionally errors if doesn't exist
 account = config["account"]
 region = config["region"]
 # TODO: These parameters should be tied to the account and region.
@@ -53,6 +49,7 @@ NafnBackendStack(
     domain_name,
     db_instance_class=config["db_instance_class"],
     db_instance_size=config["db_instance_size"],
+    cors_allow_origins=config.get("cors_allow_origins"),
     env=env,
 )
 
