@@ -44,6 +44,7 @@ jobs:
               throw new Error('Select a successful backend staging run from main.');
             }
             core.setOutput('sha', run.head_sha);
+            core.setOutput('run_id', runId);
 
       - uses: actions/checkout@v7
         with:
@@ -68,15 +69,17 @@ jobs:
           allowed-account-ids: ${{ steps.target.outputs.account }}
 
       - name: Show production diff
-        run: cdk diff NAFN-Backend NAFN-Frontend --exclusively -c env=prod --method template
+        run: cdk diff '*' -c env=prod --method template
 
-      - name: Deploy both production stacks
-        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=prod --require-approval never
+      - name: Deploy production stacks
+        run: cdk deploy --all -c env=prod --require-approval never
 
       # TODO Add a read-only API smoke test when the PostgreSQL-backed API is ready.
 
       - name: Record production revision
         env:
           RELEASE_SHA: ${{ steps.candidate.outputs.sha }}
-          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
-        run: printf 'Released `%s` from staging run `%s`.\n' "$RELEASE_SHA" "$STAGING_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          STAGING_RUN_ID: ${{ steps.candidate.outputs.run_id }}
+        run: |
+          printf '::notice::Released %s to production from staging run %s.\n' "$RELEASE_SHA" "$STAGING_RUN_ID"
+          printf 'Released `%s` from staging run `%s`.\n' "$RELEASE_SHA" "$STAGING_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
