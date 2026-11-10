@@ -29,13 +29,9 @@ hosted_zone_id = config["hosted_zone_id"]
 hosted_zone_name = config["hosted_zone_name"]
 domain_name = config["domain_name"]
 project_name = config["project_name"]
-enable_previews = config.get("enable_previews", False)
 frontend_preview_github_oidc_subject = config.get(
     "frontend_preview_github_oidc_subject"
 )
-
-if enable_previews and not frontend_preview_github_oidc_subject:
-    raise ValueError("Enabled previews require frontend_preview_github_oidc_subject")
 
 env = Environment(account=account, region=region)
 
@@ -48,7 +44,7 @@ FrontendStack(
     hosted_zone_name=hosted_zone_name,
     domain_name=domain_name,
     env=env,
-    enable_previews=enable_previews,
+    enable_previews=bool(frontend_preview_github_oidc_subject),
 )
 
 NafnBackendStack(

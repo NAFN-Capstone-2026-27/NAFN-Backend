@@ -7,9 +7,9 @@ AWS CDK (Python) infrastructure for NAFN.
 - **FrontendStack** (`NAFNBackend/FrontendInfrastructure/frontend_stack.py`) hosts the static frontend:
   - A private S3 bucket named after the environment's domain (for example `dev.nafn.us`)
   - A CloudFront distribution that reads from the bucket through Origin Access Control and redirects HTTP to HTTPS. Only `/assets/*` is cached in staging and prod.
-  - Route 53 A/AAAA alias records for the website and, in dev, `*.<domain_name>`
+  - Route 53 A/AAAA alias records for the website and `*.<domain_name>` where previews are enabled
   - An existing ACM certificate from the environment's `certificate_arn`; the dev certificate also covers preview subdomains
-  - A CloudFront Function for React deep links in every environment and PR subdomain routing in dev
+  - A CloudFront Function for React deep links in every environment and PR subdomain routing where previews are enabled
   - Outputs `S3FrontendBucket`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations:
   - A DynamoDB table keyed by `ein`
@@ -19,7 +19,7 @@ AWS CDK (Python) infrastructure for NAFN.
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
   - A staging and prod frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
-  - A frontend preview role, restricted to `frontend_preview_github_oidc_subject`, that can upload to only `previews/` in the website bucket. Only created for environments that set `frontend_preview_github_oidc_subject` (currently just `dev`)
+  - A frontend preview role, restricted to `frontend_preview_github_oidc_subject`, that can upload only under `previews/` in the website bucket
   - A CDK deployment role restricted to `cdk_deploy_github_oidc_subject` and the target account's standard CDK deploy, file publishing, and lookup roles
   - Outputs `FrontendDeployRoleArn`, `FrontendPreviewDeployRoleArn`, and `CdkDeployRoleArn` when the corresponding roles exist
 
@@ -85,9 +85,8 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `hosted_zone_name`| Name of the hosted zone (for example `nafn.us`)     |
 | `domain_name`     | Domain the frontend is served from                  |
 | `project_name`    | Used as the CloudFormation stack name               |
-| `enable_previews` | Optional. Serves frontend PR previews from `pr-<number>.<domain_name>` |
 | `frontend_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the frontend deployment role |
-| `frontend_preview_github_oidc_subject` | Exact frontend GitHub environment subject allowed to assume the preview deployment role. Required when `enable_previews` is set |
+| `frontend_preview_github_oidc_subject` | Optional. Enables frontend previews and sets the exact GitHub OIDC subject allowed to assume the preview deployment role. Configured in dev only |
 | `cdk_deploy_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the CDK deployment role |
 
 The configured environments are `dev.nafn.us`, `staging.nafn.us`, and `nafn.us` for dev, staging, and prod.
@@ -119,8 +118,7 @@ use `CdkDeployRoleArn` and assume the standard CDK bootstrap roles.
 ## GitHub Actions deployments
 
 The backend workflows run from `main` in the `dev`, `staging`, and `prod` GitHub
-environments. They deploy `NAFN-Backend` and `NAFN-Frontend`. The OIDC stack is
-managed separately from application deployments.
+environments. Each workflow deploys all stacks in the selected revision.
 
 | Environment variable | Value |
 | --- | --- |
@@ -129,15 +127,17 @@ managed separately from application deployments.
 The workflows read the AWS account and region from `cdk.json` and verify the
 authenticated account before deploying.
 
+Before the first workflow run in each environment, use separate AWS credentials
+to set up `NAFN-GitHubOidc` and configure `AWS_ROLE_ARN` from the stack output. If a later deployment breaks the role's trust or replaces the role, use separate credentials to restore
+access and update `AWS_ROLE_ARN` if the ARN changed.
+
 - **Dev** — **Deploy backend PR to dev** accepts an open same-repo PR number or
   `main` as a restore source. Users with repository write access can run it.
-  The workflow authenticates to dev before CDK synthesizes and deploys the
-  selected revision.
-- **Staging** — Pushes to `main` deploy both stacks. A successful run summary
+- **Staging** — Pushes to `main` deploy all stacks. A successful run summary
   includes the run ID for production promotion.
 - **Prod** — Anyone with repository write access can run **Promote backend to
   production** with a successful staging run ID. It authenticates to prod, logs a
-  CDK diff for that revision and deploys both stacks.
+  CDK diff for all stacks in that revision, and deploys them.
 
 ## Manual backend smoke tests
 

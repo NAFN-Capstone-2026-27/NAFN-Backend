@@ -29,7 +29,7 @@ class PreviewPermissionsTests(unittest.TestCase):
             config["hosted_zone_name"],
             config["domain_name"],
             env,
-            enable_previews=config["enable_previews"],
+            enable_previews=True,
         )
         oidc_stack = GitHubOidcStack(
             app,
@@ -216,7 +216,6 @@ class PreviewEnvironmentTests(unittest.TestCase):
                 tempfile.TemporaryDirectory() as outdir,
             ):
                 config = environments[name]
-                self.assertFalse(config.get("enable_previews", False))
                 self.assertNotIn("frontend_preview_github_oidc_subject", config)
                 app = App(outdir=outdir)
                 env = Environment(account=config["account"], region=config["region"])
@@ -229,7 +228,6 @@ class PreviewEnvironmentTests(unittest.TestCase):
                     config["hosted_zone_name"],
                     config["domain_name"],
                     env,
-                    enable_previews=config.get("enable_previews", False),
                 )
                 oidc_stack = GitHubOidcStack(
                     app,

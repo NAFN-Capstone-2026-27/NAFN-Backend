@@ -45,9 +45,11 @@ jobs:
           allowed-account-ids: ${{ steps.target.outputs.account }}
 
       - name: Deploy stacks
-        run: cdk deploy NAFN-Backend NAFN-Frontend --exclusively -c env=staging --require-approval never
+        run: cdk deploy --all -c env=staging --require-approval never
 
       # TODO Add an API smoke test when the PostgreSQL-backed API is ready.
 
       - name: Record staged revision
-        run: printf 'Staging deployed `%s`. Use run ID `%s` to promote it.\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          printf '::notice::Staging deployed %s. Use run ID %s to promote it.\n' "$GITHUB_SHA" "$GITHUB_RUN_ID"
+          printf 'Staging deployed `%s`. Use run ID `%s` to promote it.\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
