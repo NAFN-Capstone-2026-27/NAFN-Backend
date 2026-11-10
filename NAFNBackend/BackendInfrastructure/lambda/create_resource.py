@@ -32,6 +32,7 @@ def handler(event, context):
     if errors:
         return json_response(400, {"errors": errors})
 
+    # Read the partners table only to verify an optional partner link.
     if "partnerId" in resource:
         partner = partners_table.get_item(
             Key={"partnerId": resource["partnerId"]},
