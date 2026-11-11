@@ -27,7 +27,8 @@
         "frontend_preview_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:environment:dev",
         "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:dev",
         "db_instance_class": "T4G",
-        "db_instance_size": "MICRO"
+        "db_instance_size": "MICRO",
+        "cors_allow_origins": ["*"]
       },
       "prod": {
         "certificate_arn": "arn:aws:acm:us-east-1:892077328991:certificate/e10f34a3-a761-4480-baf3-bb8e5763aa99",
@@ -40,7 +41,8 @@
         "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:environment:prod",
         "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:prod",
         "db_instance_class": "T4G",
-        "db_instance_size": "MICRO"
+        "db_instance_size": "MICRO",
+        "cors_allow_origins": ["*"]
       },
       "staging": {
         "certificate_arn": "arn:aws:acm:us-east-1:689508754428:certificate/d0495d3a-437a-42d8-a9a4-6de79713a117",
