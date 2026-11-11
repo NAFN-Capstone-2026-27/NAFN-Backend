@@ -121,6 +121,5 @@ class AppEnvironmentTests(unittest.TestCase):
         self.assertEqual(template["Outputs"]["ApiUrl"]["Value"], f"https://{domain}")
 
 
-
 if __name__ == "__main__":
     unittest.main()

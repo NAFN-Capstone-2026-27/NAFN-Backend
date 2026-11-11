@@ -127,7 +127,11 @@ class NafnBackendStack(Stack):
             certificate=certificate,
         )
         apigw.ApiMapping(
-            self, "ApiDomainMapping", api=self.api, domain_name=api_domain, stage=api_stage
+            self,
+            "ApiDomainMapping",
+            api=self.api,
+            domain_name=api_domain,
+            stage=api_stage,
         )
         route53.ARecord(
             self,
