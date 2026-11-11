@@ -67,6 +67,7 @@ class AppEnvironmentTests(unittest.TestCase):
                 for a in stacks.values()
             )
         )
+        self.assert_api_domain(templates["NAFN-Backend"], "api.dev.nafn.us")
         api = templates["NAFN-Backend"]["Resources"]["NafnApi5CAE70CD"]
         self.assertEqual(api["Properties"]["CorsConfiguration"]["AllowOrigins"], ["*"])
 
@@ -81,6 +82,9 @@ class AppEnvironmentTests(unittest.TestCase):
                 f"{config['project_name']}-Backend",
                 db_instance_class=config["db_instance_class"],
                 db_instance_size=config["db_instance_size"],
+                domain_name=config["domain_name"],
+                hosted_zone_id=config["hosted_zone_id"],
+                hosted_zone_name=config["hosted_zone_name"],
                 cors_allow_origins=config["cors_allow_origins"],
                 env=Environment(account=config["account"], region=config["region"]),
             )
@@ -96,14 +100,26 @@ class AppEnvironmentTests(unittest.TestCase):
             ],
             ["*"],
         )
-        self.assertFalse(
-            any(
-                r["Type"].startswith(
-                    ("AWS::CloudFront::", "AWS::Route53::", "AWS::CertificateManager::")
-                )
-                for r in resources.values()
-            )
+        self.assert_api_domain(template, "api.nafn.us")
+
+    def assert_api_domain(self, template, domain):
+        assertions = Template.from_json(template)
+        assertions.has_resource_properties(
+            "AWS::CertificateManager::Certificate",
+            {"DomainName": domain, "ValidationMethod": "DNS"},
         )
+        assertions.has_resource_properties(
+            "AWS::ApiGatewayV2::DomainName", {"DomainName": domain}
+        )
+        assertions.has_resource_properties(
+            "AWS::ApiGatewayV2::ApiMapping",
+            {"ApiId": {"Ref": "NafnApi5CAE70CD"}},
+        )
+        assertions.has_resource_properties(
+            "AWS::Route53::RecordSet", {"Name": f"{domain}.", "Type": "A"}
+        )
+        self.assertEqual(template["Outputs"]["ApiUrl"]["Value"], f"https://{domain}")
+
 
 
 if __name__ == "__main__":

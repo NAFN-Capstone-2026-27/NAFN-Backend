@@ -7,11 +7,14 @@ from aws_cdk import (
     Stack,
     aws_apigatewayv2 as apigw,
     aws_apigatewayv2_integrations as integrations,
+    aws_certificatemanager as acm,
     aws_dynamodb as dynamodb,
     aws_ec2 as ec2,
     aws_lambda as lambda_,
     aws_logs as logs,
     aws_rds as rds,
+    aws_route53 as route53,
+    aws_route53_targets as route53_targets,
 )
 from constructs import Construct
 
@@ -25,6 +28,9 @@ class NafnBackendStack(Stack):
         construct_id: str,
         db_instance_class: str,
         db_instance_size: str,
+        domain_name: str,
+        hosted_zone_id: str,
+        hosted_zone_name: str,
         cors_allow_origins: list[str] | None = None,
         **kwargs,
     ) -> None:
@@ -95,11 +101,44 @@ class NafnBackendStack(Stack):
             create_default_stage=False,
         )
         # The endpoint is public, so cap request rates to limit abuse and cost.
-        self.api.add_stage(
+        api_stage = self.api.add_stage(
             "NafnApiDefaultStage",
             stage_name="$default",
             auto_deploy=True,
             throttle=apigw.ThrottleSettings(rate_limit=10, burst_limit=20),
+        )
+        api_domain_name = f"api.{domain_name}"
+        hosted_zone = route53.HostedZone.from_hosted_zone_attributes(
+            self,
+            "ApiHostedZone",
+            hosted_zone_id=hosted_zone_id,
+            zone_name=hosted_zone_name,
+        )
+        certificate = acm.Certificate(
+            self,
+            "ApiCertificate",
+            domain_name=api_domain_name,
+            validation=acm.CertificateValidation.from_dns(hosted_zone),
+        )
+        api_domain = apigw.DomainName(
+            self,
+            "ApiDomainName",
+            domain_name=api_domain_name,
+            certificate=certificate,
+        )
+        apigw.ApiMapping(
+            self, "ApiDomainMapping", api=self.api, domain_name=api_domain, stage=api_stage
+        )
+        route53.ARecord(
+            self,
+            "ApiARecord",
+            zone=hosted_zone,
+            record_name=f"{api_domain_name}.",
+            target=route53.RecordTarget.from_alias(
+                route53_targets.ApiGatewayv2DomainProperties(
+                    api_domain.regional_domain_name, api_domain.regional_hosted_zone_id
+                )
+            ),
         )
         self.api.add_routes(
             path="/partners",
@@ -248,6 +287,6 @@ class NafnBackendStack(Stack):
         CfnOutput(self, "DbEndpoint", value=self.database.db_instance_endpoint_address)
         CfnOutput(self, "DbSecretArn", value=self.database.secret.secret_arn)
 
-        CfnOutput(self, "ApiUrl", value=self.api.api_endpoint)
+        CfnOutput(self, "ApiUrl", value=f"https://{api_domain_name}")
         CfnOutput(self, "PartnersTableName", value=self.partners_table.table_name)
         CfnOutput(self, "ResourcesTableName", value=self.resources_table.table_name)
