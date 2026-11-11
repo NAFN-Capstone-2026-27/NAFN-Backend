@@ -1,72 +1,156 @@
 # NAFN Backend
 
-AWS CDK infrastructure and API for NAFN.
+AWS CDK (Python) infrastructure for NAFN.
 
 ## Stacks
 
-- **NAFN-Frontend:** Hosts the static frontend using S3, CloudFront, and Route 53, with a GitHub deployment role.
-- **NAFN-Backend:** Stores partners and resources in DynamoDB and exposes GET/POST `/partners` and `/resources` through API Gateway and Lambda. It also provisions a private RDS PostgreSQL instance.
+- **FrontendStack** (`NAFNBackend/FrontendInfrastructure/frontend_stack.py`) hosts the static frontend:
+  - A private S3 bucket named after the environment's domain (for example `dev.nafn.us`)
+  - A CloudFront distribution that reads from the bucket through Origin Access Control and redirects HTTP to HTTPS. Only `/assets/*` is cached in staging and prod.
+  - Route 53 A/AAAA alias records for the website and `*.<domain_name>` where previews are enabled
+  - An existing ACM certificate from the environment's `certificate_arn`; the dev certificate also covers preview subdomains
+  - A CloudFront Function for React deep links in every environment and PR subdomain routing where previews are enabled
+  - Outputs `S3FrontendBucket`
+- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
+  - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
+  - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
+  - A private RDS PostgreSQL instance
+  - API outputs `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
+- **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
+  - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
+  - A staging and prod frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
+  - A frontend preview role, restricted to `frontend_preview_github_oidc_subject`, that can upload only under `previews/` in the website bucket
+  - A CDK deployment role restricted to `cdk_deploy_github_oidc_subject` and the target account's standard CDK deploy, file publishing, and lookup roles
+  - Outputs `FrontendDeployRoleArn`, `FrontendPreviewDeployRoleArn`, and `CdkDeployRoleArn` when the corresponding roles exist
 
-See [API.md](API.md) for API URLs, request fields, and frontend integration examples.
+The API's routes, request and response formats, and restrictions are documented in [API.md](API.md).
+
+## Prerequisites
+
+- Python 3.12 or newer
+- Node.js and the AWS CDK CLI (`npm install -g aws-cdk`)
+- Deployments use AWS credentials for the target account and the standard CDK bootstrap in that account and region.
 
 ## Setup
 
-Requires Python compatible with `pyproject.toml`, Node.js, the AWS CDK CLI, and AWS credentials for the target account. The account and region must be bootstrapped for CDK.
+Create and activate a virtualenv:
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install .
+```
+$ python3 -m venv .venv
+$ source .venv/bin/activate
 ```
 
-## Environments and deployment
+Install the project and its dependencies (declared in `pyproject.toml`):
 
-Settings live in `cdk.json`. Pass `-c env=dev`, `-c env=staging`, or `-c env=prod` to CDK commands.
+```
+$ pip install .
+```
 
-Each entry under `context.environments` uses these fields:
+To add dependencies, add them to the `dependencies` list in `pyproject.toml` and run `pip install .` again.
 
-| Field | Purpose |
-| --- | --- |
-| `account` | AWS account ID for both stacks |
-| `region` | AWS region for both stacks |
-| `project_name` | Prefix for stack names: `<project_name>-Frontend` and `<project_name>-Backend` |
-| `domain_name` | Frontend domain and S3 bucket name |
-| `certificate_arn` | Existing ACM certificate for the frontend domain; CloudFront requires it in `us-east-1` |
-| `hosted_zone_id` | ID of the existing Route 53 hosted zone used for frontend DNS records |
-| `hosted_zone_name` | Name of that hosted zone, such as `nafn.us` |
-| `github_oidc_subject` | Exact GitHub OIDC subject allowed to assume the frontend deployment role |
-| `enable_previews` | Enables PR preview hosting in dev |
-| `github_preview_oidc_subject` | Exact GitHub OIDC subject for the preview deployment role when previews are enabled |
+## Linting and formatting
+
+Install the development tools into your activated virtualenv:
+
+```bash
+pip install -e '.[dev]'
+```
+
+Run the same checks as CI from the repository root:
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+To apply automatic fixes and formatting locally:
+
+```bash
+ruff check --fix .
+ruff format .
+```
+
+Shared settings and the pinned Ruff version live in `pyproject.toml`.
+
+## Environments
+
+Per-environment settings live under `context.environments` in `cdk.json`. Each environment needs:
+
+| Key               | Description                                         |
+| ----------------- | --------------------------------------------------- |
+| `account`         | AWS account ID to deploy into                       |
+| `region`          | AWS region to deploy into                           |
+| `certificate_arn` | ARN of the existing ACM certificate in `us-east-1` |
+| `hosted_zone_id`  | ID of the existing Route 53 hosted zone             |
+| `hosted_zone_name`| Name of the hosted zone (for example `nafn.us`)     |
+| `domain_name`     | Domain the frontend is served from                  |
+| `project_name`    | Used as the CloudFormation stack name               |
+| `frontend_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the frontend deployment role |
+| `frontend_preview_github_oidc_subject` | Optional. Enables frontend previews and sets the exact GitHub OIDC subject allowed to assume the preview deployment role. Configured in dev only |
+| `cdk_deploy_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the CDK deployment role |
 | `db_instance_class`, `db_instance_size` | CDK EC2 instance class and size for RDS |
-| `cors_allow_origins` | Optional list of browser CORS origins; defaults to `["*"]` (any origin), as configured for both dev and prod. |
+| `cors_allow_origins` | Optional. List of browser origins allowed by the API. Defaults to `["*"]` |
 
-Both stacks are configured for dev, staging, and prod. Dev serves
-`dev.nafn.us`, staging serves `staging.nafn.us`, and prod serves `nafn.us`.
-PR previews use `pr-<number>.dev.nafn.us`. The preview role can upload
-only under `previews/`, where S3 expires files 30 days after upload.
+The configured environments are `dev.nafn.us`, `staging.nafn.us`, and `nafn.us` for dev, staging, and prod.
 
-After deploying the frontend, set `AWS_MAIN_ROLE_ARN` and `S3_BUCKET` from
-`FrontendDeployRoleArn` and `S3FrontendBucket`. For dev previews, set
-`AWS_PREVIEW_ROLE_ARN` from `FrontendPreviewDeployRoleArn`. Set `AWS_REGION`
-to the environment's region.
+CloudFront uses the existing certificate configured for each environment. Preview requests
+use their PR's files and `index.html`; asset requests stay within that PR's prefix.
+The same routing function serves the root `index.html` for extensionless React
+routes on each site's domain and CloudFront distribution hostname, preserving asset paths.
 
-Inspect the diff before deploying the stack you changed:
+Preview URLs use `pr-<number>.dev.nafn.us`.
 
-```bash
-cdk diff <stack-name> -c env=dev
-cdk deploy <stack-name> -c env=dev
-```
+## GitHub Actions authentication
 
-## Tests
+The frontend deployment role can list the website bucket and upload/delete its objects.
+The preview role can list/upload only under `previews/` and trusts the frontend
+repo's `dev` GitHub environment. Both roles live in `NAFN-GitHubOidc` and use its
+GitHub OIDC provider. The frontend workflow publishes same-repository PRs to
+separate prefixes in dev.
 
-```bash
-python -m unittest discover -s tests
-node --test tests/frontend_router.test.cjs
-```
+When previews are enabled, S3 expires files under `previews/` 30 days after
+their last upload, regardless of whether the PR is still open. Expiration is
+asynchronous and does not affect the main website files.
 
-Install the pinned Ruff version with `pip install -e '.[dev]'`. Run
-`ruff check .` and `ruff format --check .` to match CI.
+The frontend workflow uses `FrontendPreviewDeployRoleArn` in dev and
+`FrontendDeployRoleArn` in staging and prod. Its deployment targets correspond
+to the environment's `S3FrontendBucket` and `ApiUrl` outputs. Backend workflows
+use `CdkDeployRoleArn` and assume the standard CDK bootstrap roles.
 
-After a backend deployment, run `python post_deployment_tests.py --env dev`
-or use `--env staging`. The script creates and cleans up temporary partner
-and resource records and restricts writes to dev and staging.
+## GitHub Actions deployments
+
+The backend workflows run from `main` in the `dev`, `staging`, and `prod` GitHub
+environments. Each workflow deploys all stacks in the selected revision.
+
+| Environment variable | Value |
+| --- | --- |
+| `AWS_ROLE_ARN` | `CdkDeployRoleArn` from the target account's OIDC stack |
+
+The workflows read the AWS account and region from `cdk.json` and verify the
+authenticated account before deploying.
+
+Before the first workflow run in each environment, use separate AWS credentials
+to set up `NAFN-GitHubOidc` and configure `AWS_ROLE_ARN` from the stack output. If a later deployment breaks the role's trust or replaces the role, use separate credentials to restore
+access and update `AWS_ROLE_ARN` if the ARN changed.
+
+- **Dev** — **Deploy backend PR to dev** accepts an open same-repo PR number or
+  `main` as a restore source. Users with repository write access can run it.
+- **Staging** — Pushes to `main` deploy all stacks. A successful run summary
+  includes the run ID for production promotion.
+- **Prod** — Anyone with repository write access can run **Promote backend to
+  production** with a successful staging run ID. It authenticates to prod, logs a
+  CDK diff for all stacks in that revision, and deploys them.
+
+## Manual backend smoke tests
+
+`python post_deployment_tests.py --env dev` checks the DynamoDB-backed API.
+It creates a temporary partner and a linked resource, checks validation and list
+responses, and cleans up both records. It exits nonzero if a check fails.
+
+Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed.
+
+## Local checks
+
+- `node --test tests/frontend_router.test.cjs` tests SPA and preview routing locally
+- `python -m unittest discover -s tests` runs the backend and deployment tests
+- `cdk synth -c env=dev` generates the dev CloudFormation templates

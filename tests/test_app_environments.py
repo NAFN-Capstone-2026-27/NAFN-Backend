@@ -56,9 +56,11 @@ class AppEnvironmentTests(unittest.TestCase):
             }
             return stacks, templates
 
-    def test_dev_synthesizes_frontend_and_backend(self):
+    def test_dev_synthesizes_frontend_backend_and_github_oidc(self):
         stacks, templates = self.synthesize("dev")
-        self.assertEqual(set(stacks), {"NAFN-Frontend", "NAFN-Backend"})
+        self.assertEqual(
+            set(stacks), {"NAFN-Frontend", "NAFN-Backend", "NAFN-GitHubOidc"}
+        )
         self.assertTrue(
             all(
                 a["environment"] == "aws://463735866782/us-east-1"
@@ -77,7 +79,6 @@ class AppEnvironmentTests(unittest.TestCase):
             stack = NafnBackendStack(
                 app,
                 f"{config['project_name']}-Backend",
-                config["domain_name"],
                 db_instance_class=config["db_instance_class"],
                 db_instance_size=config["db_instance_size"],
                 cors_allow_origins=config["cors_allow_origins"],
