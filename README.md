@@ -11,11 +11,11 @@ AWS CDK (Python) infrastructure for NAFN.
   - An existing ACM certificate from the environment's `certificate_arn`; the dev certificate also covers preview subdomains
   - A CloudFront Function for React deep links in every environment and PR subdomain routing where previews are enabled
   - Outputs `S3FrontendBucket`
-- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations:
-  - A DynamoDB table keyed by `ein`
-  - An HTTP API with `POST /partners`, backed by a Lambda function (`NAFNBackend/BackendInfrastructure/lambda/`) that validates and stores a partner
-  - `GET /partners`, backed by a Lambda function that lists every partner
-  - Stack outputs `ApiUrl` and `PartnersTableName`
+- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
+  - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
+  - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
+  - A private RDS PostgreSQL instance
+  - API outputs `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
   - A staging and prod frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
@@ -88,6 +88,8 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `frontend_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the frontend deployment role |
 | `frontend_preview_github_oidc_subject` | Optional. Enables frontend previews and sets the exact GitHub OIDC subject allowed to assume the preview deployment role. Configured in dev only |
 | `cdk_deploy_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the CDK deployment role |
+| `db_instance_class`, `db_instance_size` | CDK EC2 instance class and size for RDS |
+| `cors_allow_origins` | Optional. List of browser origins allowed by the API. Defaults to `["*"]` |
 
 The configured environments are `dev.nafn.us`, `staging.nafn.us`, and `nafn.us` for dev, staging, and prod.
 
@@ -141,15 +143,14 @@ access and update `AWS_ROLE_ARN` if the ARN changed.
 
 ## Manual backend smoke tests
 
-`post_deployment_tests.py` checks the existing DynamoDB-backed API. It creates a
-dummy partner with an EIN starting with
-`00`, checks duplicate and validation errors, checks that `GET /partners`
-lists it, and deletes the dummy record. It exits nonzero if a check fails.
+`python post_deployment_tests.py --env dev` checks the DynamoDB-backed API.
+It creates a temporary partner and a linked resource, checks validation and list
+responses, and cleans up both records. It exits nonzero if a check fails.
 
-Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed. Its cleanup only deletes an item that is still the dummy partner.
+Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed.
 
 ## Local checks
 
 - `node --test tests/frontend_router.test.cjs` tests SPA and preview routing locally
-- `python -m unittest tests.test_preview_permissions` tests deployment permission boundaries
+- `python -m unittest discover -s tests` runs the backend and deployment tests
 - `cdk synth -c env=dev` generates the dev CloudFormation templates
