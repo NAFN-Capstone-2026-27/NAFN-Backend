@@ -21,7 +21,7 @@ from constructs import Construct
 LAMBDA_DIR = Path(__file__).parent / "lambda"
 
 
-class NafnBackendStack(Stack):
+class ApiStack(Stack):
     def __init__(
         self,
         scope: Construct,
@@ -31,36 +31,15 @@ class NafnBackendStack(Stack):
         domain_name: str,
         hosted_zone_id: str,
         hosted_zone_name: str,
+        partners_table: dynamodb.ITableV2,
+        resources_table: dynamodb.ITableV2,
         cors_allow_origins: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        self.partners_table = dynamodb.TableV2(
-            self,
-            "NafnPartnersTable",
-            partition_key=dynamodb.Attribute(
-                name="partnerId", type=dynamodb.AttributeType.STRING
-            ),
-            billing=dynamodb.Billing.on_demand(),
-            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
-                point_in_time_recovery_enabled=True
-            ),
-            removal_policy=RemovalPolicy.RETAIN,
-        )
-
-        self.resources_table = dynamodb.TableV2(
-            self,
-            "NafnResourcesTable",
-            partition_key=dynamodb.Attribute(
-                name="resourceId", type=dynamodb.AttributeType.STRING
-            ),
-            billing=dynamodb.Billing.on_demand(),
-            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
-                point_in_time_recovery_enabled=True
-            ),
-            removal_policy=RemovalPolicy.RETAIN,
-        )
+        self.partners_table = partners_table
+        self.resources_table = resources_table
 
         lambda_code = lambda_.Code.from_asset(
             str(LAMBDA_DIR),

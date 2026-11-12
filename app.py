@@ -2,7 +2,8 @@
 
 from aws_cdk import App, Environment
 
-from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
+from NAFNBackend.BackendInfrastructure.api_stack import ApiStack
+from NAFNBackend.DataInfrastructure.data_stack import DataStack
 from NAFNBackend.DeploymentInfrastructure.github_oidc_stack import GitHubOidcStack
 from NAFNBackend.FrontendInfrastructure.frontend_stack import FrontendStack
 
@@ -47,9 +48,13 @@ FrontendStack(
     enable_previews=bool(frontend_preview_github_oidc_subject),
 )
 
-NafnBackendStack(
+data_stack = DataStack(app, f"{project_name}-Data", env=env)
+
+ApiStack(
     app,
-    f"{project_name}-Backend",
+    f"{project_name}-Api",
+    partners_table=data_stack.partners_table,
+    resources_table=data_stack.resources_table,
     db_instance_class=config["db_instance_class"],
     db_instance_size=config["db_instance_size"],
     domain_name=domain_name,

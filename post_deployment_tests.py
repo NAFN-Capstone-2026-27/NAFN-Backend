@@ -41,7 +41,7 @@ def main():
 
 
 def run_checks(session, config):
-    outputs = stack_outputs(session, f"{config['project_name']}-Backend")
+    outputs = stack_outputs(session, f"{config['project_name']}-Api")
     required = {"ApiUrl", "PartnersTableName", "ResourcesTableName"}
     if not required.issubset(outputs):
         raise ValueError(

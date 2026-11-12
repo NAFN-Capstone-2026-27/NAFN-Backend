@@ -9,7 +9,8 @@ from pathlib import Path
 from aws_cdk import App, Environment
 from aws_cdk.assertions import Template
 
-from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
+from NAFNBackend.BackendInfrastructure.api_stack import ApiStack
+from NAFNBackend.DataInfrastructure.data_stack import DataStack
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,10 +57,11 @@ class AppEnvironmentTests(unittest.TestCase):
             }
             return stacks, templates
 
-    def test_dev_synthesizes_frontend_backend_and_github_oidc(self):
+    def test_dev_synthesizes_frontend_data_api_and_github_oidc(self):
         stacks, templates = self.synthesize("dev")
         self.assertEqual(
-            set(stacks), {"NAFN-Frontend", "NAFN-Backend", "NAFN-GitHubOidc"}
+            set(stacks),
+            {"NAFN-Frontend", "NAFN-Data", "NAFN-Api", "NAFN-GitHubOidc"},
         )
         self.assertTrue(
             all(
@@ -67,29 +69,33 @@ class AppEnvironmentTests(unittest.TestCase):
                 for a in stacks.values()
             )
         )
-        self.assert_api_domain(templates["NAFN-Backend"], "api.dev.nafn.us")
-        api = templates["NAFN-Backend"]["Resources"]["NafnApi5CAE70CD"]
+        self.assert_api_domain(templates["NAFN-Api"], "api.dev.nafn.us")
+        api = templates["NAFN-Api"]["Resources"]["NafnApi5CAE70CD"]
         self.assertEqual(api["Properties"]["CorsConfiguration"]["AllowOrigins"], ["*"])
 
-    def test_prod_backend_configuration_preserves_existing_api_and_allows_any_origin(
+    def test_prod_api_configuration_preserves_existing_api_and_allows_any_origin(
         self,
     ):
         config = self.config["prod"]
         with tempfile.TemporaryDirectory() as directory:
             app = App(outdir=directory)
-            stack = NafnBackendStack(
+            env = Environment(account=config["account"], region=config["region"])
+            data = DataStack(app, f"{config['project_name']}-Data", env=env)
+            stack = ApiStack(
                 app,
-                f"{config['project_name']}-Backend",
+                f"{config['project_name']}-Api",
+                partners_table=data.partners_table,
+                resources_table=data.resources_table,
                 db_instance_class=config["db_instance_class"],
                 db_instance_size=config["db_instance_size"],
                 domain_name=config["domain_name"],
                 hosted_zone_id=config["hosted_zone_id"],
                 hosted_zone_name=config["hosted_zone_name"],
                 cors_allow_origins=config["cors_allow_origins"],
-                env=Environment(account=config["account"], region=config["region"]),
+                env=env,
             )
             template = Template.from_stack(stack).to_json()
-        self.assertEqual(stack.stack_name, "NAFN-Backend")
+        self.assertEqual(stack.stack_name, "NAFN-Api")
         self.assertEqual(stack.environment, "aws://892077328991/us-east-1")
         resources = template["Resources"]
         self.assertIn("NafnApi5CAE70CD", resources)

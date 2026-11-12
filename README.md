@@ -11,8 +11,12 @@ AWS CDK (Python) infrastructure for NAFN.
   - An existing ACM certificate from the environment's `certificate_arn`; the dev certificate also covers preview subdomains
   - A CloudFront Function for React deep links in every environment and PR subdomain routing where previews are enabled
   - Outputs `S3FrontendBucket`
-- **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
-  - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
+- **DataStack** (`NAFNBackend/DataInfrastructure/data_stack.py`) owns the environment's DynamoDB tables:
+  - Tables keyed by generated `partnerId` and `resourceId` UUIDs, with on-demand billing, point-in-time recovery, and retention on removal
+  - Single-region tables; multi-region replication and reservations are not enabled yet
+  - Outputs `PartnersTableName` and `ResourcesTableName`
+- **ApiStack** (`NAFNBackend/BackendInfrastructure/api_stack.py`, deployed as `NAFN-Api`) receives table references from `DataStack`:
+  - Lambda environment variables and table-scoped permissions reference the data stack's tables
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
   - A custom API domain at `api.<domain_name>` (for example `api.dev.nafn.us`), with a DNS-validated regional ACM certificate and Route 53 alias record
   - A private RDS PostgreSQL instance
@@ -25,6 +29,21 @@ AWS CDK (Python) infrastructure for NAFN.
   - Outputs `FrontendDeployRoleArn`, `FrontendPreviewDeployRoleArn`, and `CdkDeployRoleArn` when the corresponding roles exist
 
 The API's routes, request and response formats, and restrictions are documented in [API.md](API.md).
+
+### Existing deployments: stack migration
+
+The DynamoDB tables now belong to `NAFN-Data` instead of `NAFN-Backend`.
+The remaining backend stack is now named `NAFN-Api`. CloudFormation treats this
+name as a different stack, so its existing resources must also be migrated;
+a normal deploy does not rename or remove `NAFN-Backend`.
+Do not apply this split to an existing environment with a normal `cdk deploy`:
+that would create new empty tables, redirect the API to them, and retain the old
+ones. First complete a supported resource refactor or a retain/import migration,
+verifying that both tables keep their existing physical IDs and data. Review the
+migration and CDK diff for each environment before resuming normal deployments.
+Fresh environments can deploy all stacks normally; cross-stack references make
+`NAFN-Api` depend on `NAFN-Data`. API table-name outputs remain available
+for existing consumers.
 
 ## Prerequisites
 
