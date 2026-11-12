@@ -90,11 +90,12 @@ class SmokeTests(unittest.TestCase):
         with (
             patch.object(
                 smoke, "stack_outputs", return_value={"ApiUrl": "https://example.org"}
-            ),
+            ) as outputs,
             patch.object(smoke, "request") as request,
         ):
             with self.assertRaisesRegex(ValueError, "required table/API outputs"):
                 smoke.run_checks(self.session, self.config)
+            outputs.assert_called_once_with(self.session, "Demo-Api")
             request.assert_not_called()
 
     def test_unexpected_api_endpoint_stops_before_requests(self):

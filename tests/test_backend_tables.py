@@ -4,7 +4,8 @@ import unittest
 from aws_cdk import App, Environment
 from aws_cdk.assertions import Template
 
-from NAFNBackend.BackendInfrastructure.nafn_backend_stack import NafnBackendStack
+from NAFNBackend.BackendInfrastructure.api_stack import ApiStack
+from NAFNBackend.DataInfrastructure.data_stack import DataStack
 
 
 class BackendTablesTests(unittest.TestCase):
@@ -12,17 +13,23 @@ class BackendTablesTests(unittest.TestCase):
     def setUpClass(cls):
         cls.output_dir = tempfile.TemporaryDirectory()
         app = App(outdir=cls.output_dir.name)
-        cls.stack = NafnBackendStack(
+        env = Environment(account="123456789012", region="us-east-1")
+        cls.data_stack = DataStack(app, "DataTest", env=env)
+        cls.stack = ApiStack(
             app,
-            "BackendTest",
+            "ApiTest",
+            partners_table=cls.data_stack.partners_table,
+            resources_table=cls.data_stack.resources_table,
             db_instance_class="T4G",
             db_instance_size="MICRO",
             domain_name="example.com",
             hosted_zone_id="Z123456789",
             hosted_zone_name="example.com",
-            env=Environment(account="123456789012", region="us-east-1"),
+            env=env,
         )
         cls.template = Template.from_stack(cls.stack).to_json()
+        cls.data_template = Template.from_stack(cls.data_stack).to_json()
+        cls.assembly = app.synth()
 
     @classmethod
     def tearDownClass(cls):
@@ -30,10 +37,10 @@ class BackendTablesTests(unittest.TestCase):
 
     def table_resource(self, table):
         resource = table.node.default_child
-        return self.template["Resources"][self.stack.get_logical_id(resource)]
+        return self.data_template["Resources"][self.data_stack.get_logical_id(resource)]
 
     def table_reference(self, table):
-        return {"Ref": self.stack.get_logical_id(table.node.default_child)}
+        return self.stack.resolve(table.table_name)
 
     def policy_statements(self, function):
         role_id = self.stack.get_logical_id(function.role.node.default_child)
@@ -46,9 +53,7 @@ class BackendTablesTests(unittest.TestCase):
         ]
 
     def table_arn(self, table):
-        return {
-            "Fn::GetAtt": [self.stack.get_logical_id(table.node.default_child), "Arn"]
-        }
+        return self.stack.resolve(table.table_arn)
 
     def test_new_tables_use_independent_string_ids_without_indexes(self):
         for table, key in (
@@ -75,21 +80,33 @@ class BackendTablesTests(unittest.TestCase):
                 )
                 self.assertEqual(resource["DeletionPolicy"], "Retain")
 
-    def test_only_new_tables_remain(self):
+    def test_only_data_stack_owns_tables(self):
         tables = {
             key
-            for key, resource in self.template["Resources"].items()
+            for key, resource in self.data_template["Resources"].items()
             if resource["Type"] == "AWS::DynamoDB::GlobalTable"
         }
         self.assertEqual(
             tables,
             {
-                self.stack.get_logical_id(self.stack.partners_table.node.default_child),
-                self.stack.get_logical_id(
+                self.data_stack.get_logical_id(
+                    self.stack.partners_table.node.default_child
+                ),
+                self.data_stack.get_logical_id(
                     self.stack.resources_table.node.default_child
                 ),
             },
         )
+
+        self.assertFalse(
+            any(
+                resource["Type"]
+                in {"AWS::DynamoDB::Table", "AWS::DynamoDB::GlobalTable"}
+                for resource in self.template["Resources"].values()
+            )
+        )
+        backend = self.assembly.get_stack_artifact(self.stack.artifact_id)
+        self.assertIn(self.data_stack.artifact_id, [d.id for d in backend.dependencies])
 
     def test_partner_handlers_and_output_use_the_new_table(self):
         new_table = self.table_reference(self.stack.partners_table)
@@ -124,14 +141,7 @@ class BackendTablesTests(unittest.TestCase):
         )
         self.assertEqual(
             statements[0]["Resource"],
-            {
-                "Fn::GetAtt": [
-                    self.stack.get_logical_id(
-                        self.stack.partners_table.node.default_child
-                    ),
-                    "Arn",
-                ],
-            },
+            self.table_arn(self.stack.partners_table),
         )
 
     def test_resource_handlers_receive_only_the_tables_they_use(self):
