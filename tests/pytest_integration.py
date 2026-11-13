@@ -1,5 +1,5 @@
 """
-Use python run_tests.py to run every .py test in this folder   
+Use python pytest_integration.py to run every .py test in this folder   
 """
 
 import sys
