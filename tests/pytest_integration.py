@@ -1,5 +1,5 @@
 """
-Use python pytest_integration.py to run every .py test in this folder   
+Use python pytest_integration.py to run every .py test in this folder
 """
 
 import sys
@@ -26,9 +26,7 @@ def resolve(name: str) -> str:
 
 
 def list_tests() -> None:
-    files = sorted(
-        p for p in TESTS_DIR.glob("*.py") if p.name != "__init__.py"
-    )
+    files = sorted(p for p in TESTS_DIR.glob("*.py") if p.name != "__init__.py")
     print("Available test files:")
     for path in files:
         print(f"  {path.stem.removeprefix('test_')}  ->  tests/{path.name}")
