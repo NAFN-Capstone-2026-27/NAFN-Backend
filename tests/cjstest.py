@@ -8,7 +8,7 @@ PATTERNS = ["*.cjs"]
  
 CJS_TEST_FILES = sorted({p for pattern in PATTERNS for p in TESTS_DIR.rglob(pattern)})
  
-# this should run all the CJS test files in the test folder
+ 
 @pytest.mark.parametrize("cjs_file", CJS_TEST_FILES, ids=lambda p: p.name)
 def test_cjs_file(cjs_file):
     result = subprocess.run(
