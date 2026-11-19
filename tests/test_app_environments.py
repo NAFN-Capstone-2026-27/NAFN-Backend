@@ -69,7 +69,9 @@ class AppEnvironmentTests(unittest.TestCase):
         )
         self.assert_api_domain(templates["NAFN-Backend"], "api.dev.nafn.us")
         api = templates["NAFN-Backend"]["Resources"]["NafnApi5CAE70CD"]
-        self.assertEqual(api["Properties"]["CorsConfiguration"]["AllowOrigins"], ["*"])
+        cors = api["Properties"]["CorsConfiguration"]
+        self.assertEqual(cors["AllowOrigins"], ["*"])
+        self.assertEqual(set(cors["AllowHeaders"]), {"Content-Type", "Idempotency-Key"})
 
     def test_prod_backend_configuration_preserves_existing_api_and_allows_any_origin(
         self,
