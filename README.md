@@ -145,10 +145,12 @@ access and update `AWS_ROLE_ARN` if the ARN changed.
 ## Manual backend smoke tests
 
 `python post_deployment_tests.py --env dev` checks the DynamoDB-backed API.
+It requires the stack's `ApiUrl` output to match the environment's custom HTTPS
+API address, such as `https://api.dev.nafn.us`.
 It creates a temporary partner and a linked resource, checks validation and list
 responses, and cleans up both records. It exits nonzero if a check fails.
 
-Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed.
+Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment shares a stack or API domain with a disallowed environment.
 
 ## Local checks
 
