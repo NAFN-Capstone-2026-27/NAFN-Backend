@@ -34,6 +34,7 @@ def handler(event, context):
     if errors:
         return json_response(400, {"errors": errors})
 
+    # Partners without an EIN can be created directly because no reservation is needed.
     if "ein" not in partner:
         partner["partnerId"] = str(uuid4())
         partner["createdAt"] = datetime.now(UTC).isoformat()
