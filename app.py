@@ -50,8 +50,6 @@ FrontendStack(
 NafnBackendStack(
     app,
     f"{project_name}-Backend",
-    db_instance_class=config["db_instance_class"],
-    db_instance_size=config["db_instance_size"],
     cors_allow_origins=config.get("cors_allow_origins"),
     env=env,
 )

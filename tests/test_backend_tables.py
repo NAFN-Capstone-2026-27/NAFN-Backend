@@ -15,8 +15,6 @@ class BackendTablesTests(unittest.TestCase):
         cls.stack = NafnBackendStack(
             app,
             "BackendTest",
-            db_instance_class="T4G",
-            db_instance_size="MICRO",
             env=Environment(account="123456789012", region="us-east-1"),
         )
         cls.template = Template.from_stack(cls.stack).to_json()

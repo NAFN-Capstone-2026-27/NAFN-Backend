@@ -14,7 +14,6 @@ AWS CDK (Python) infrastructure for NAFN.
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
   - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
-  - A private RDS PostgreSQL instance
   - API outputs `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
@@ -88,7 +87,6 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `frontend_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the frontend deployment role |
 | `frontend_preview_github_oidc_subject` | Optional. Enables frontend previews and sets the exact GitHub OIDC subject allowed to assume the preview deployment role. Configured in dev only |
 | `cdk_deploy_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the CDK deployment role |
-| `db_instance_class`, `db_instance_size` | CDK EC2 instance class and size for RDS |
 | `cors_allow_origins` | Optional. List of browser origins allowed by the API. Defaults to `["*"]` |
 
 The configured environments are `dev.nafn.us`, `staging.nafn.us`, and `nafn.us` for dev, staging, and prod.
