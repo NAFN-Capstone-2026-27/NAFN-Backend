@@ -14,7 +14,8 @@ AWS CDK (Python) infrastructure for NAFN.
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
   - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
-  - API outputs `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
+  - A custom API domain at `api.<domain_name>` (for example `api.dev.nafn.us`), with a DNS-validated regional ACM certificate and Route 53 alias record
+  - `ApiUrl` returns the custom HTTPS API address; API outputs include `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
   - A staging and prod frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
@@ -142,10 +143,12 @@ access and update `AWS_ROLE_ARN` if the ARN changed.
 ## Manual backend smoke tests
 
 `python post_deployment_tests.py --env dev` checks the DynamoDB-backed API.
+It requires the stack's `ApiUrl` output to match the environment's custom HTTPS
+API address, such as `https://api.dev.nafn.us`.
 It creates a temporary partner and a linked resource, checks validation and list
 responses, and cleans up both records. It exits nonzero if a check fails.
 
-Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment deploys to the same stack as one that isn't allowed.
+Because it creates and deletes records, the script only runs against environments listed in `WRITABLE_ENVIRONMENTS` in `post_deployment_tests.py` (currently `dev` and `staging`). It refuses to run if your AWS credentials are for a different account than the environment's, or if the environment shares a stack or API domain with a disallowed environment.
 
 ## Local checks
 

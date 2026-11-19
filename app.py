@@ -50,6 +50,9 @@ FrontendStack(
 NafnBackendStack(
     app,
     f"{project_name}-Backend",
+    domain_name=domain_name,
+    hosted_zone_id=hosted_zone_id,
+    hosted_zone_name=hosted_zone_name,
     cors_allow_origins=config.get("cors_allow_origins"),
     env=env,
 )
