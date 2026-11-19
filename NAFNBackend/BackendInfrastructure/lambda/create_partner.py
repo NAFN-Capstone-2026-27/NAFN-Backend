@@ -57,22 +57,7 @@ def handler(event, context):
 
     request_id = str(request_uuid)
     payload_hash = sha256(json.dumps(partner, sort_keys=True).encode()).hexdigest()
-    ein = partner["ein"]
-    reservation = reservations.get_item(Key={"ein": ein}, ConsistentRead=True).get(
-        "Item"
-    )
-    if reservation is None:
-        reservation = put_if_absent(
-            reservations,
-            {
-                "ein": ein,
-                "requestId": request_id,
-                "partnerId": str(uuid4()),
-                "payloadHash": payload_hash,
-            },
-            "ein",
-        )
-
+    reservation = reserve_ein(partner["ein"], request_id, payload_hash)
     if reservation.get("requestId") != request_id:
         return json_response(409, {"error": "A partner with this EIN already exists."})
     if reservation["payloadHash"] != payload_hash:
@@ -89,6 +74,24 @@ def handler(event, context):
     if saved != {**partner, "createdAt": saved.get("createdAt")}:
         raise RuntimeError("Reserved partner ID has an unexpected record.")
     return json_response(201, saved)
+
+
+def reserve_ein(ein, request_id, payload_hash):
+    key = {"ein": ein}
+    existing = reservations.get_item(Key=key, ConsistentRead=True).get("Item")
+    if existing is not None:
+        return existing
+
+    return put_if_absent(
+        reservations,
+        {
+            "ein": ein,
+            "requestId": request_id,
+            "partnerId": str(uuid4()),
+            "payloadHash": payload_hash,
+        },
+        "ein",
+    )
 
 
 def put_if_absent(target, item, key_name):
