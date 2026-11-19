@@ -110,7 +110,6 @@ class NafnBackendStack(Stack):
             self.create_partner_function,
             "dynamodb:PutItem",
             "dynamodb:GetItem",
-            "dynamodb:Scan",
         )
         # PutItem claims an EIN; GetItem checks who owns a claim when a write's
         # outcome is uncertain or a retry finds the EIN already claimed.

@@ -9,10 +9,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 from uuid import UUID, uuid4
 
-import boto3
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError, ReadTimeoutError
-from botocore.stub import ANY, Stubber
 
 LAMBDA_DIR = (
     Path(__file__).resolve().parents[1] / "NAFNBackend/BackendInfrastructure/lambda"
@@ -37,8 +35,6 @@ class CreatePartnerTests(unittest.TestCase):
     def setUp(self):
         self.table = MagicMock()
         self.table.name = "test-partners"
-        self.paginator = self.table.meta.client.get_paginator.return_value
-        self.paginator.paginate.return_value = iter([{"Items": []}])
         self.table_patch = patch.object(create_partner, "table", self.table)
         self.table_patch.start()
         self.addCleanup(self.table_patch.stop)
@@ -97,18 +93,16 @@ class CreatePartnerTests(unittest.TestCase):
                 "focusAreas",
             },
         )
-        self.table.meta.client.get_paginator.assert_not_called()
         self.assertEqual(self.reservations.mock_calls, [])
         self.table.put_item.assert_called_once_with(Item=body)
 
-    def test_blank_and_null_eins_are_omitted_without_a_scan(self):
+    def test_blank_and_null_eins_are_omitted_without_a_reservation(self):
         for value in ("", " ", None):
             with self.subTest(value=value):
                 self.payload["ein"] = value
                 status, body = self.submit()
                 self.assertEqual(status, 201)
                 self.assertNotIn("ein", body)
-        self.table.meta.client.get_paginator.assert_not_called()
         self.assertEqual(self.reservations.mock_calls, [])
 
     def test_normalized_ein_is_conditionally_reserved_before_partner_write(self):
@@ -119,11 +113,8 @@ class CreatePartnerTests(unittest.TestCase):
         status, body = self.submit()
         self.assertEqual(status, 201)
         self.assertEqual(body["ein"], "012345678")
-        self.paginator.paginate.assert_called_once_with(
-            TableName="test-partners",
-            FilterExpression=Attr("ein").eq("012345678"),
-            ProjectionExpression="partnerId",
-            ConsistentRead=True,
+        self.reservations.get_item.assert_called_once_with(
+            Key={"ein": "012345678"}, ConsistentRead=True
         )
         claim = self.reservations.put_item.call_args.kwargs["Item"]
         self.assertEqual(claim["ein"], "012345678")
@@ -139,46 +130,6 @@ class CreatePartnerTests(unittest.TestCase):
             ],
         )
 
-    def test_unreserved_legacy_ein_on_later_page_blocks_creation(self):
-        self.payload["ein"] = "12-3456789"
-        self.paginator.paginate.return_value = iter(
-            [
-                {"Items": [], "LastEvaluatedKey": {"partnerId": "earlier"}},
-                {"Items": [{"partnerId": "existing"}]},
-            ]
-        )
-        status, body = self.submit()
-        self.assertEqual(status, 409)
-        self.assertIn("EIN", body["error"])
-        self.reservations.put_item.assert_not_called()
-        self.table.put_item.assert_not_called()
-
-    def test_all_filtered_empty_pages_are_consumed_before_insert(self):
-        self.payload["ein"] = "123456789"
-        visited = []
-
-        def pages():
-            for page in range(3):
-                visited.append(page)
-                yield {"Items": []}
-
-        self.paginator.paginate.return_value = pages()
-        self.assertEqual(self.submit()[0], 201)
-        self.assertEqual(visited, [0, 1, 2])
-
-    def test_scan_failure_does_not_allow_insertion(self):
-        self.payload["ein"] = "123456789"
-
-        def failing_pages():
-            yield {"Items": []}
-            raise RuntimeError("scan unavailable")
-
-        self.paginator.paginate.return_value = failing_pages()
-        with self.assertRaisesRegex(RuntimeError, "scan unavailable"):
-            self.submit()
-        self.reservations.put_item.assert_not_called()
-        self.table.put_item.assert_not_called()
-
     def test_missing_or_invalid_idempotency_key_is_rejected_before_database_calls(self):
         self.payload["ein"] = "123456789"
         for headers in (None, {}, {"idempotency-key": "invalid"}):
@@ -189,6 +140,16 @@ class CreatePartnerTests(unittest.TestCase):
                 self.assertEqual(response["statusCode"], 400)
         self.assertEqual(self.reservations.mock_calls, [])
         self.assertEqual(self.table.mock_calls, [])
+
+    def test_backfilled_reservation_blocks_creation(self):
+        self.payload["ein"] = "12-3456789"
+        self.reservations.get_item.return_value = {
+            "Item": {"ein": "123456789", "partnerId": str(uuid4())}
+        }
+
+        self.assertEqual(self.submit()[0], 409)
+        self.reservations.put_item.assert_not_called()
+        self.table.put_item.assert_not_called()
 
     def test_conflicting_claim_is_resolved_with_a_strong_read(self):
         self.payload["ein"] = "123456789"
@@ -254,7 +215,6 @@ class CreatePartnerTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(body["partnerId"], claim["partnerId"])
         self.reservations.put_item.assert_called_once()
-        self.paginator.paginate.assert_called_once()
 
     def test_retry_returns_saved_partner_and_changed_data_conflicts(self):
         self.payload["ein"] = "123456789"
@@ -277,27 +237,11 @@ class CreatePartnerTests(unittest.TestCase):
         self.assertEqual(self.submit({**self.payload, "name": "Different"})[0], 409)
         self.table.put_item.assert_not_called()
 
-    def test_retry_can_replay_a_partner_created_during_the_legacy_scan(self):
-        self.payload["ein"] = "01-2345678"
-        _, original = self.submit()
-        claim = self.reservations.put_item.call_args.kwargs["Item"]
-        self.reservations.put_item.reset_mock()
-        self.reservations.get_item.side_effect = [{}, {"Item": claim}]
-        self.paginator.paginate.return_value = [{"Items": [original]}]
-        self.table.put_item.side_effect = ClientError(
-            {"Error": {"Code": "ConditionalCheckFailedException"}}, "PutItem"
-        )
-        self.table.get_item.return_value = {"Item": original}
-
-        self.assertEqual(self.submit(), (201, original))
-        self.reservations.put_item.assert_not_called()
-
     def test_missing_fields_collect_errors_before_database_calls(self):
         status, body = self.submit({})
         self.assertEqual(status, 400)
         self.assertEqual(len(body["errors"]), 5)
         self.table.put_item.assert_not_called()
-        self.table.meta.client.get_paginator.assert_not_called()
 
     def test_invalid_ein_and_focus_areas_are_rejected(self):
         for field, value in (
@@ -310,7 +254,6 @@ class CreatePartnerTests(unittest.TestCase):
                 payload = {**self.payload, field: value}
                 self.assertEqual(self.submit(payload)[0], 400)
         self.table.put_item.assert_not_called()
-        self.table.meta.client.get_paginator.assert_not_called()
 
     def test_location_fields_are_ignored_on_partner_submissions(self):
         status, body = self.submit(
@@ -340,41 +283,6 @@ class CreatePartnerTests(unittest.TestCase):
         response = create_partner.handler({"body": body, "isBase64Encoded": True}, None)
         self.assertEqual(response["statusCode"], 400)
         self.table.put_item.assert_not_called()
-
-    def test_real_sdk_paginator_marshals_filter_and_advances_past_empty_page(self):
-        resource = boto3.Session(
-            aws_access_key_id="testing",
-            aws_secret_access_key="testing",
-            region_name="us-east-1",
-        ).resource("dynamodb")
-        client = resource.meta.client
-        expected = {
-            "TableName": "test-partners",
-            "FilterExpression": ANY,
-            "ProjectionExpression": "partnerId",
-            "ConsistentRead": True,
-        }
-        with (
-            Stubber(client) as stubber,
-            patch.object(create_partner, "table", resource.Table("test-partners")),
-        ):
-            stubber.add_response(
-                "scan",
-                {
-                    "Items": [],
-                    "LastEvaluatedKey": {"partnerId": {"S": "first-page"}},
-                },
-                expected,
-            )
-            stubber.add_response(
-                "scan",
-                {
-                    "Items": [{"partnerId": {"S": "existing"}}],
-                },
-                {**expected, "ExclusiveStartKey": ANY},
-            )
-            self.assertTrue(create_partner.ein_exists("012345678"))
-            stubber.assert_no_pending_responses()
 
 
 if __name__ == "__main__":

@@ -58,7 +58,7 @@ def handler(event, context):
     request_id = str(request_uuid)
     payload_hash = sha256(json.dumps(partner, sort_keys=True).encode()).hexdigest()
     reservation = reserve_ein(partner["ein"], request_id, payload_hash)
-    if reservation is None or reservation.get("requestId") != request_id:
+    if reservation.get("requestId") != request_id:
         return json_response(409, {"error": "A partner with this EIN already exists."})
     if reservation["payloadHash"] != payload_hash:
         return json_response(
@@ -81,11 +81,6 @@ def reserve_ein(ein, request_id, payload_hash):
     existing = reservations.get_item(Key=key, ConsistentRead=True).get("Item")
     if existing is not None:
         return existing
-
-    # Partners created before reservations still block new claims. If a current
-    # writer created the match during the scan, its claim will now be visible.
-    if ein_exists(ein):
-        return reservations.get_item(Key=key, ConsistentRead=True).get("Item")
 
     return put_if_absent(
         reservations,
@@ -112,18 +107,6 @@ def put_if_absent(target, item, key_name):
             raise
         return existing
     return item
-
-
-def ein_exists(ein):
-    """Check every scan page; a filtered empty page can still have a next page."""
-    paginator = table.meta.client.get_paginator("scan")
-    pages = paginator.paginate(
-        TableName=table.name,
-        FilterExpression=Attr("ein").eq(ein),
-        ProjectionExpression="partnerId",
-        ConsistentRead=True,
-    )
-    return any(page.get("Items") for page in pages)
 
 
 def validate_partner(body):
