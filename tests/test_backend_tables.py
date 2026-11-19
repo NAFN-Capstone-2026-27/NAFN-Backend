@@ -51,6 +51,7 @@ class BackendTablesTests(unittest.TestCase):
         for table, key in (
             (self.stack.partners_table, "partnerId"),
             (self.stack.resources_table, "resourceId"),
+            (self.stack.partner_ein_reservations_table, "ein"),
         ):
             with self.subTest(key=key):
                 resource = self.table_resource(table)
@@ -85,6 +86,9 @@ class BackendTablesTests(unittest.TestCase):
                 self.stack.get_logical_id(
                     self.stack.resources_table.node.default_child
                 ),
+                self.stack.get_logical_id(
+                    self.stack.partner_ein_reservations_table.node.default_child
+                ),
             },
         )
 
@@ -110,26 +114,54 @@ class BackendTablesTests(unittest.TestCase):
             self.template["Outputs"]["ResourcesTableName"]["Value"],
             self.table_reference(self.stack.resources_table),
         )
+        self.assertEqual(
+            self.template["Outputs"]["PartnerEinReservationsTableName"]["Value"],
+            self.table_reference(self.stack.partner_ein_reservations_table),
+        )
 
-    def test_partner_create_permissions_are_limited_to_scan_and_insert_on_new_table(
+    def test_create_partner_receives_the_ein_reservations_table(self):
+        props = self.template["Resources"][
+            self.stack.get_logical_id(
+                self.stack.create_partner_function.node.default_child
+            )
+        ]["Properties"]
+        self.assertEqual(
+            props["Environment"]["Variables"],
+            {
+                "PARTNERS_TABLE_NAME": self.table_reference(self.stack.partners_table),
+                "PARTNER_EIN_RESERVATIONS_TABLE_NAME": self.table_reference(
+                    self.stack.partner_ein_reservations_table
+                ),
+            },
+        )
+
+    def test_partner_create_permissions_are_limited_to_partner_and_ein_tables(
         self,
     ):
         statements = self.policy_statements(self.stack.create_partner_function)
-        self.assertEqual(len(statements), 1)
+        self.assertEqual(len(statements), 2)
+        by_resource = {str(s["Resource"]): s["Action"] for s in statements}
         self.assertEqual(
-            set(statements[0]["Action"]), {"dynamodb:PutItem", "dynamodb:Scan"}
+            set(by_resource[str(self.table_arn(self.stack.partners_table))]),
+            {"dynamodb:PutItem", "dynamodb:Scan"},
         )
         self.assertEqual(
-            statements[0]["Resource"],
-            {
-                "Fn::GetAtt": [
-                    self.stack.get_logical_id(
-                        self.stack.partners_table.node.default_child
-                    ),
-                    "Arn",
-                ],
-            },
+            by_resource[str(self.table_arn(self.stack.partner_ein_reservations_table))],
+            "dynamodb:PutItem",
         )
+
+    def test_only_create_partner_can_access_the_ein_reservations_table(self):
+        reservations_arn = self.table_arn(self.stack.partner_ein_reservations_table)
+        for function in (
+            self.stack.list_partners_function,
+            self.stack.create_resource_function,
+            self.stack.list_resources_function,
+        ):
+            with self.subTest(function=function.node.id):
+                self.assertNotIn(
+                    reservations_arn,
+                    [s["Resource"] for s in self.policy_statements(function)],
+                )
 
     def test_resource_handlers_receive_only_the_tables_they_use(self):
         expected = (

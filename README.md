@@ -13,9 +13,10 @@ AWS CDK (Python) infrastructure for NAFN.
   - Outputs `S3FrontendBucket`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
   - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
+  - An EIN reservations table keyed by `ein`, which holds one item per EIN in use so partner EINs can be kept unique with a conditional transactional write
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
   - A private RDS PostgreSQL instance
-  - API outputs `ApiUrl`, `PartnersTableName`, and `ResourcesTableName`
+  - API outputs `ApiUrl`, `PartnersTableName`, `ResourcesTableName`, and `PartnerEinReservationsTableName`
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
   - A staging and prod frontend deployment role, restricted to `frontend_github_oidc_subject`, that can upload to and delete from the website bucket
