@@ -13,7 +13,7 @@ AWS CDK (Python) infrastructure for NAFN.
   - Outputs `S3FrontendBucket`
 - **NafnBackendStack** (`NAFNBackend/BackendInfrastructure/nafn_backend_stack.py`) stores partner organizations and resources:
   - DynamoDB tables keyed by generated `partnerId` and `resourceId` UUIDs
-  - An EIN reservations table keyed by `ein`, which holds one item per EIN in use so partner EINs can be kept unique with a conditional transactional write
+  - An EIN reservations table keyed by `ein`, which holds one item per claimed EIN. Partner creation conditionally claims the EIN here before writing the partner; claims are never released automatically
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
   - A private RDS PostgreSQL instance
   - API outputs `ApiUrl`, `PartnersTableName`, `ResourcesTableName`, and `PartnerEinReservationsTableName`

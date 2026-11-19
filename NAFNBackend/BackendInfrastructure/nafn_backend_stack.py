@@ -56,9 +56,14 @@ class NafnBackendStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
-        # One item per EIN in use. Writing a partner with an EIN also writes its
-        # reservation here in the same transaction, conditioned on the EIN not
-        # already existing, so DynamoDB itself guarantees EIN uniqueness.
+        # One item per claimed EIN, keyed by the normalized EIN. Creating a partner
+        # with an EIN first claims it here with a conditional put; only the
+        # request that owns the claim may then create the partner. This does not
+        # use transactions, because the planned multi-region strongly consistent
+        # (MRSC) global tables do not support them. Claims never expire, so a
+        # creation that fails after claiming leaves the EIN reserved.
+        # This table is still single-region; moving it to MRSC needs the separate
+        # data stack and migration plan.
         self.partner_ein_reservations_table = dynamodb.TableV2(
             self,
             "NafnPartnerEinReservationsTable",
@@ -102,10 +107,10 @@ class NafnBackendStack(Stack):
         self.partners_table.grant(
             self.create_partner_function, "dynamodb:PutItem", "dynamodb:Scan"
         )
-        # TransactWriteItems is authorized per item, so a conditional Put of the
-        # reservation needs only PutItem on this table.
+        # PutItem claims an EIN; GetItem checks who owns a claim when a write's
+        # outcome is uncertain or a retry finds the EIN already claimed.
         self.partner_ein_reservations_table.grant(
-            self.create_partner_function, "dynamodb:PutItem"
+            self.create_partner_function, "dynamodb:PutItem", "dynamodb:GetItem"
         )
 
         self.api = apigw.HttpApi(

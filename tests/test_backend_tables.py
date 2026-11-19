@@ -146,8 +146,12 @@ class BackendTablesTests(unittest.TestCase):
             {"dynamodb:PutItem", "dynamodb:Scan"},
         )
         self.assertEqual(
-            by_resource[str(self.table_arn(self.stack.partner_ein_reservations_table))],
-            "dynamodb:PutItem",
+            set(
+                by_resource[
+                    str(self.table_arn(self.stack.partner_ein_reservations_table))
+                ]
+            ),
+            {"dynamodb:PutItem", "dynamodb:GetItem"},
         )
 
     def test_only_create_partner_can_access_the_ein_reservations_table(self):
