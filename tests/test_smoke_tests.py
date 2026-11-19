@@ -19,6 +19,7 @@ class SmokeTests(unittest.TestCase):
             "account": "123456789012",
             "region": "us-east-1",
             "project_name": "Demo",
+            "domain_name": "dev.example.org",
         }
         self.environments = {"dev": self.config}
         self.session = MagicMock()
@@ -50,6 +51,13 @@ class SmokeTests(unittest.TestCase):
 
     def test_allowed_account_and_stack_are_accepted(self):
         smoke.check_target_is_writable("dev", self.environments, self.session)
+
+    def test_environment_cannot_share_a_production_api_domain(self):
+        prod = {**self.config, "account": "999999999999"}
+        with self.assertRaisesRegex(ValueError, "shares an API domain"):
+            smoke.check_target_is_writable(
+                "dev", {**self.environments, "prod": prod}, self.session
+            )
 
     def test_cleanup_uses_exact_id_and_unique_name_condition(self):
         table = MagicMock()
@@ -98,18 +106,25 @@ class SmokeTests(unittest.TestCase):
             request.assert_not_called()
 
     def test_unexpected_api_endpoint_stops_before_requests(self):
-        outputs = {
-            "ApiUrl": "https://unrelated.example",
-            "PartnersTableName": "partners",
-            "ResourcesTableName": "resources",
-        }
-        with (
-            patch.object(smoke, "stack_outputs", return_value=outputs),
-            patch.object(smoke, "request") as request,
+        for api_url in (
+            "https://api.example.org",
+            "https://example.execute-api.us-east-1.amazonaws.com",
+            "http://api.dev.example.org",
+            "https://api.dev.example.org/wrong-stage",
         ):
-            with self.assertRaisesRegex(ValueError, "API Gateway"):
-                smoke.run_checks(self.session, self.config)
-            request.assert_not_called()
+            outputs = {
+                "ApiUrl": api_url,
+                "PartnersTableName": "partners",
+                "ResourcesTableName": "resources",
+            }
+            with (
+                self.subTest(api_url=api_url),
+                patch.object(smoke, "stack_outputs", return_value=outputs),
+                patch.object(smoke, "request") as request,
+            ):
+                with self.assertRaisesRegex(ValueError, "https://api.dev.example.org"):
+                    smoke.run_checks(self.session, self.config)
+                request.assert_not_called()
 
     def exercise_backend(
         self,
@@ -119,7 +134,7 @@ class SmokeTests(unittest.TestCase):
         cleanup_failure=False,
     ):
         outputs = {
-            "ApiUrl": "https://example.execute-api.us-east-1.amazonaws.com",
+            "ApiUrl": "https://api.dev.example.org",
             "PartnersTableName": "partners",
             "ResourcesTableName": "resources",
         }
@@ -148,7 +163,10 @@ class SmokeTests(unittest.TestCase):
             table.delete_item.side_effect = delete
 
         def request(method, url, payload=None):
-            name = url.rsplit("/", 1)[-1]
+            name = {
+                "https://api.dev.example.org/partners": "partners",
+                "https://api.dev.example.org/resources": "resources",
+            }[url]
             if method == "GET":
                 if fail_listing:
                     raise OSError("HTTP unavailable")
