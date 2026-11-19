@@ -8,14 +8,13 @@ created by the backend. There is no approval workflow or automatic geocoding.
 
 | Environment | Base URL |
 | --- | --- |
-| Production | `https://w55apwodk0.execute-api.us-east-1.amazonaws.com` |
-| Development | `https://8ud9th48ee.execute-api.us-east-1.amazonaws.com` |
+| Production | `https://api.nafn.us` |
+| Development | `https://api.dev.nafn.us` |
 
-These are the current deployment URLs. Each contains an AWS-generated API ID;
-the URL stays stable across deployments that preserve the API, but changes if
-the API is replaced or the stack is destroyed and recreated. After deployment,
-use the backend stack's `ApiUrl` CloudFormation output as the source of truth
-and update frontend configuration if it changed.
+The backend stack configures custom domains at `api.<domain_name>`. These URLs
+are available after deploying the custom domain configuration and remain stable
+when the underlying API is replaced. After deployment, use the backend stack's
+`ApiUrl` CloudFormation output as the source of truth for frontend configuration.
 
 Use the production API URL for all frontend integration for now. Requests use
 the production database, so submitted records are real shared data. The development
@@ -155,7 +154,7 @@ optional partner links and numeric coordinates. Empty table: `{"resources":[]}`.
 ## Frontend request example
 
 ```javascript
-const API_BASE_URL = "https://w55apwodk0.execute-api.us-east-1.amazonaws.com";
+const API_BASE_URL = "https://api.nafn.us";
 
 async function apiRequest(path, payload) {
   const response = await fetch(`${API_BASE_URL}${path}`, {

@@ -17,6 +17,9 @@ class BackendTablesTests(unittest.TestCase):
             "BackendTest",
             db_instance_class="T4G",
             db_instance_size="MICRO",
+            domain_name="example.com",
+            hosted_zone_id="Z123456789",
+            hosted_zone_name="example.com",
             env=Environment(account="123456789012", region="us-east-1"),
         )
         cls.template = Template.from_stack(cls.stack).to_json()

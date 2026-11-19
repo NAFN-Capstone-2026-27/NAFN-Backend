@@ -7,7 +7,6 @@ This script writes to AWS. Only explicitly allowed environments may be tested.
 
 import argparse
 import json
-import re
 import sys
 import urllib.error
 import urllib.request
@@ -47,12 +46,10 @@ def run_checks(session, config):
         raise ValueError(
             "Deploy the new backend first: required table/API outputs are missing."
         )
-    base_url = outputs["ApiUrl"].rstrip("/")
-    if not re.fullmatch(
-        rf"https://[a-z0-9]+\.execute-api\.{re.escape(config['region'])}\.amazonaws\.com",
-        base_url,
-    ):
-        raise ValueError("ApiUrl must be this region's generated API Gateway endpoint.")
+    base_url = outputs["ApiUrl"].removesuffix("/")
+    expected_url = f"https://api.{config['domain_name']}"
+    if base_url != expected_url:
+        raise ValueError(f"ApiUrl must match the environment's API URL: {expected_url}")
     db = session.resource("dynamodb")
     partners_table = db.Table(outputs["PartnersTableName"])
     resources_table = db.Table(outputs["ResourcesTableName"])
@@ -183,12 +180,18 @@ def check_target_is_writable(env_name, environments, session):
             f"Credentials are for account {account}, not {config['account']} ({env_name})."
         )
     for other_name, other in environments.items():
-        if other_name not in WRITABLE_ENVIRONMENTS and all(
+        if other_name in WRITABLE_ENVIRONMENTS:
+            continue
+        if all(
             other.get(key) == config[key]
             for key in ("account", "region", "project_name")
         ):
             raise ValueError(
                 f"'{env_name}' shares a stack with disallowed environment '{other_name}'."
+            )
+        if other["domain_name"].lower() == config["domain_name"].lower():
+            raise ValueError(
+                f"'{env_name}' shares an API domain with disallowed environment '{other_name}'."
             )
 
 
