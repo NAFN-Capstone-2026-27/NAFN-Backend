@@ -58,6 +58,27 @@ class NafnBackendStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
+        # One item per claimed EIN, keyed by the normalized EIN. Creating a partner
+        # with an EIN first claims it here with a conditional put; only the
+        # request that owns the claim may then create the partner. This does not
+        # use transactions, because the planned multi-region strongly consistent
+        # (MRSC) global tables do not support them. Claims never expire, so a
+        # creation that fails after claiming leaves the EIN reserved.
+        # This table is still single-region; moving it to MRSC needs the separate
+        # data stack and migration plan.
+        self.partner_ein_reservations_table = dynamodb.TableV2(
+            self,
+            "NafnPartnerEinReservationsTable",
+            partition_key=dynamodb.Attribute(
+                name="ein", type=dynamodb.AttributeType.STRING
+            ),
+            billing=dynamodb.Billing.on_demand(),
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
         lambda_code = lambda_.Code.from_asset(
             str(LAMBDA_DIR),
             exclude=["__pycache__", "**/__pycache__/**", "*.pyc", "**/*.pyc"],
@@ -72,7 +93,12 @@ class NafnBackendStack(Stack):
             code=lambda_code,
             timeout=Duration.seconds(10),
             memory_size=256,
-            environment={"PARTNERS_TABLE_NAME": self.partners_table.table_name},
+            environment={
+                "PARTNERS_TABLE_NAME": self.partners_table.table_name,
+                "PARTNER_EIN_RESERVATIONS_TABLE_NAME": (
+                    self.partner_ein_reservations_table.table_name
+                ),
+            },
             log_group=logs.LogGroup(
                 self,
                 "NafnCreatePartnerLogs",
@@ -82,6 +108,11 @@ class NafnBackendStack(Stack):
         )
         self.partners_table.grant(
             self.create_partner_function, "dynamodb:PutItem", "dynamodb:Scan"
+        )
+        # PutItem claims an EIN; GetItem checks who owns a claim when a write's
+        # outcome is uncertain or a retry finds the EIN already claimed.
+        self.partner_ein_reservations_table.grant(
+            self.create_partner_function, "dynamodb:PutItem", "dynamodb:GetItem"
         )
 
         self.api = apigw.HttpApi(
@@ -233,3 +264,8 @@ class NafnBackendStack(Stack):
         CfnOutput(self, "ApiUrl", value=f"https://{api_domain_name}")
         CfnOutput(self, "PartnersTableName", value=self.partners_table.table_name)
         CfnOutput(self, "ResourcesTableName", value=self.resources_table.table_name)
+        CfnOutput(
+            self,
+            "PartnerEinReservationsTableName",
+            value=self.partner_ein_reservations_table.table_name,
+        )
