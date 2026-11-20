@@ -16,7 +16,6 @@ AWS CDK (Python) infrastructure for NAFN.
   - An EIN reservations table keyed by `ein`, which holds one item per claimed EIN. Partner creation conditionally claims the EIN here before writing the partner; claims are never released automatically
   - An HTTP API with GET and POST routes for `/partners` and `/resources`, backed by Lambda functions
   - A custom API domain at `api.<domain_name>` (for example `api.dev.nafn.us`), with a DNS-validated regional ACM certificate and Route 53 alias record
-  - A private RDS PostgreSQL instance
   - `ApiUrl` returns the custom HTTPS API address; API outputs include `ApiUrl`, `PartnersTableName`, `ResourcesTableName`, and `PartnerEinReservationsTableName`
 - **GitHubOidcStack** (`NAFNBackend/DeploymentInfrastructure/github_oidc_stack.py`) lets GitHub Actions deploy to the account:
   - The account's GitHub OIDC provider (an account can only have one, so every deploy role shares it)
@@ -90,7 +89,6 @@ Per-environment settings live under `context.environments` in `cdk.json`. Each e
 | `frontend_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the frontend deployment role |
 | `frontend_preview_github_oidc_subject` | Optional. Enables frontend previews and sets the exact GitHub OIDC subject allowed to assume the preview deployment role. Configured in dev only |
 | `cdk_deploy_github_oidc_subject` | Optional. Exact GitHub OIDC subject allowed to assume the CDK deployment role |
-| `db_instance_class`, `db_instance_size` | CDK EC2 instance class and size for RDS |
 | `cors_allow_origins` | Optional. List of browser origins allowed by the API. Defaults to `["*"]` |
 
 The configured environments are `dev.nafn.us`, `staging.nafn.us`, and `nafn.us` for dev, staging, and prod.

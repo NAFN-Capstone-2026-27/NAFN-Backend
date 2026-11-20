@@ -80,8 +80,6 @@ class AppEnvironmentTests(unittest.TestCase):
             stack = NafnBackendStack(
                 app,
                 f"{config['project_name']}-Backend",
-                db_instance_class=config["db_instance_class"],
-                db_instance_size=config["db_instance_size"],
                 domain_name=config["domain_name"],
                 hosted_zone_id=config["hosted_zone_id"],
                 hosted_zone_name=config["hosted_zone_name"],
