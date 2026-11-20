@@ -144,7 +144,7 @@ class BackendTablesTests(unittest.TestCase):
         by_resource = {str(s["Resource"]): s["Action"] for s in statements}
         self.assertEqual(
             set(by_resource[str(self.table_arn(self.stack.partners_table))]),
-            {"dynamodb:PutItem", "dynamodb:Scan"},
+            {"dynamodb:PutItem", "dynamodb:GetItem"},
         )
         self.assertEqual(
             set(

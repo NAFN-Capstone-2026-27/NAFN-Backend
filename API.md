@@ -35,8 +35,9 @@ base URL; there is no `/api` prefix.
   client-supplied primary IDs, and client-supplied timestamps are ignored.
 - Invalid JSON/non-object input returns 400 with `{"error":"..."}`. Invalid
   fields return 400 with `{"errors":["..."]}`. Server failures may return 5xx;
-  show a failure message rather than treating the request as successful. A failed network response does not prove a POST was not
-  saved, so avoid automatically retrying submissions: there is no idempotency key.
+  a failed response can occur after the write succeeds. Only partner submissions
+  with an EIN support safe retries. For other submissions, check the saved
+  records before submitting again.
 - GET endpoints return all records for the demo dataset, with no pagination,
   filters, or guaranteed order. Sort/filter the returned arrays in the frontend.
 - Requests are limited to about 10/second with burst capacity of 20 across callers.
@@ -63,8 +64,13 @@ Focus areas: Domestic Violence, Rehabilitation, Assisted Living, Medical Emergen
 Climate Emergency.
 
 Missing, null, empty or whitespace-only EIN is omitted from the stored record.
-A supplied EIN that already exists returns 409. Avoid parallel duplicate
-submissions: simultaneous requests can still create duplicate EINs.
+When supplying an EIN, send a new UUIDv4 in the `Idempotency-Key` header for
+each new submission. If a response is lost or returns 5xx, retry with the same
+key and the same partner data. The key is scoped to the normalized EIN. A retry
+after creation returns 201 with the original partner ID and timestamp.
+
+The EIN is reserved before the partner is written. If creation is interrupted,
+the reservation survives, and only the original submission can complete it.
 
 `animalsAccepted` and `timeLimits` belong to resources. If sent to POST /partners,
 these fields are ignored and not stored.
@@ -85,9 +91,11 @@ these fields are ignored and not stored.
 Response 201: the cleaned partner above, with `partnerId` and `createdAt` added,
 `phone` normalized to `3035550100`, and `ein` normalized to `012345678`.
 
-- 400: invalid/missing required field or malformed supplied EIN/focus area.
-- 409: `{"error":"A partner with this EIN already exists."}` when a duplicate
-  is found.
+- 400 for invalid partner data or a missing or invalid `Idempotency-Key` on a
+  submission with an EIN.
+- 409 with `{"error":"A partner with this EIN already exists."}` when the EIN
+  belongs to a partner or is reserved by a different submission. Reusing the
+  same key for the EIN with different normalized partner data also returns 409.
 
 ### GET /partners
 
@@ -156,11 +164,14 @@ optional partner links and numeric coordinates. Empty table: `{"resources":[]}`.
 ```javascript
 const API_BASE_URL = "https://api.nafn.us";
 
-async function apiRequest(path, payload) {
+async function apiRequest(path, payload, idempotencyKey) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: payload === undefined ? "GET" : "POST",
     ...(payload === undefined ? {} : {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
       body: JSON.stringify(payload),
     }),
   });
@@ -178,11 +189,13 @@ const { partners } = await apiRequest("/partners");
 const { resources } = await apiRequest("/resources");
 ```
 
-For a partner submission, pass the partner form values as the second argument to
-`apiRequest("/partners", values)` and save the returned `partnerId`. For a linked
-resource, include that ID in `apiRequest("/resources", values)`. For an independent
-resource, omit `partnerId`. Populate a partner selector from GET `/partners` when
-linking resources to an existing organization.
+For a partner submission with an EIN, generate the key once with
+`crypto.randomUUID()` and keep it with the submitted form values for retries.
+Call `apiRequest("/partners", values, idempotencyKey)` and save the returned
+`partnerId`. Omit the key for submissions without an EIN. For a linked resource,
+include the saved partner ID in `apiRequest("/resources", values)`. For an
+independent resource, omit `partnerId`. Populate a partner selector from GET
+`/partners` when linking resources to an existing organization.
 
 Convert coordinate inputs to numbers before submitting (for example,
 `Number(latInput)`), but validate nonempty inputs first: `Number("")` produces

@@ -26,6 +26,16 @@ AWS CDK (Python) infrastructure for NAFN.
 
 The API's routes, request and response formats, and restrictions are documented in [API.md](API.md).
 
+Coordinate the EIN reservation rollout with API clients so they send
+`Idempotency-Key` for EIN submissions. Pause and drain partner creation while
+switching writers to the reservation flow. Before resuming writes, backfill and
+verify a reservation for every EIN already in the partners table. Key each
+backfilled reservation by the normalized `ein`, include the existing
+`partnerId`, and omit `requestId`. The API uses the reservations table to
+enforce EIN uniqueness.
+The tables are currently single-region. Splitting the data and API stacks and
+migrating populated tables to MRSC require a separate migration plan.
+
 ## Prerequisites
 
 - Python 3.12 or newer

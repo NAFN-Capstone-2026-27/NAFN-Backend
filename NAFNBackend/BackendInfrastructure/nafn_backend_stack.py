@@ -107,7 +107,9 @@ class NafnBackendStack(Stack):
             ),
         )
         self.partners_table.grant(
-            self.create_partner_function, "dynamodb:PutItem", "dynamodb:Scan"
+            self.create_partner_function,
+            "dynamodb:PutItem",
+            "dynamodb:GetItem",
         )
         # PutItem claims an EIN; GetItem checks who owns a claim when a write's
         # outcome is uncertain or a retry finds the EIN already claimed.
@@ -123,7 +125,7 @@ class NafnBackendStack(Stack):
                     cors_allow_origins if cors_allow_origins is not None else ["*"]
                 ),
                 allow_methods=[apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.GET],
-                allow_headers=["Content-Type"],
+                allow_headers=["Content-Type", "Idempotency-Key"],
             ),
             create_default_stage=False,
         )
