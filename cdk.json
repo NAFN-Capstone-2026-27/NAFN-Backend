@@ -26,8 +26,6 @@
         "region": "us-east-1",
         "frontend_preview_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:environment:dev",
         "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:dev",
-        "db_instance_class": "T4G",
-        "db_instance_size": "MICRO",
         "cors_allow_origins": ["*"]
       },
       "prod": {
@@ -40,8 +38,6 @@
         "region": "us-east-1",
         "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:environment:prod",
         "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:prod",
-        "db_instance_class": "T4G",
-        "db_instance_size": "MICRO",
         "cors_allow_origins": ["*"]
       },
       "staging": {
@@ -53,9 +49,7 @@
         "account": "689508754428",
         "region": "us-east-1",
         "frontend_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Web-Frontend@1407947963:environment:staging",
-        "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:staging",
-        "db_instance_class": "T4G",
-        "db_instance_size": "MICRO"
+        "cdk_deploy_github_oidc_subject": "repo:NAFN-Capstone-2026-27@337576140/NAFN-Backend@1399005057:environment:staging"
       }
     }
   }

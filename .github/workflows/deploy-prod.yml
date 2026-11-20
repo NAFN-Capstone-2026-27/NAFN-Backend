@@ -74,7 +74,7 @@ jobs:
       - name: Deploy production stacks
         run: cdk deploy --all -c env=prod --require-approval never
 
-      # TODO Add a read-only API smoke test when the PostgreSQL-backed API is ready.
+      # TODO Add a read-only API smoke test when the DynamoDB-backed API is ready.
 
       - name: Record production revision
         env:
